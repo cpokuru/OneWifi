@@ -202,14 +202,17 @@ CosaWifiCreate
     return  (ANSC_HANDLE)pMyObject;
 }
 
-char* PSM_Get_Record_Status(char *recName, char *strValue)
+char* PSM_Get_Record_Status(char *recName, char *strValue, unsigned int str_size)
 {
     int retry = 0;
     int retPsmGet = CCSP_SUCCESS;
+    char *strVal = NULL;
     while(retry++ < 2) {
-        retPsmGet = PSM_Get_Record_Value2(bus_handle, g_Subsystem, recName, NULL, &strValue);
+        retPsmGet = PSM_Get_Record_Value2(bus_handle, g_Subsystem, recName, NULL, &strVal);
         if (retPsmGet == CCSP_SUCCESS) {
             wifi_util_dbg_print(WIFI_PSM,"%s:%d retPsmGet success for %s and strValue is %s\n", __FUNCTION__,__LINE__, recName, strValue);
+            snprintf(strValue, str_size, "%s", strVal);
+            ((CCSP_MESSAGE_BUS_INFO *)bus_handle)->freefunc(strVal);
             return strValue;
         } else if (retPsmGet == CCSP_CR_ERR_INVALID_PARAM) {
             wifi_util_dbg_print(WIFI_PSM,"%s:%d PSM_Get_Record_Value2 (%s) returned error %d \n",__FUNCTION__,__LINE__,recName,retPsmGet);
@@ -256,7 +259,7 @@ void psm_get_mac_list_entry(hash_map_t *psm_mac_map, unsigned int instance_numbe
         memset(recName, 0, sizeof(recName));
         memset(strValue, 0, sizeof(strValue));
         snprintf(recName, sizeof(recName), MacFilterDevice, instance_number, index);
-        str = PSM_Get_Record_Status(recName, strValue);
+        str = PSM_Get_Record_Status(recName, strValue, sizeof(strValue));
         if (str != NULL) {
             strcpy(temp_psm_mac_param->device_name, str);
             wifi_util_dbg_print(WIFI_PSM,"psm get device_name is %s\r\n", str);
@@ -267,7 +270,7 @@ void psm_get_mac_list_entry(hash_map_t *psm_mac_map, unsigned int instance_numbe
         memset(recName, 0, sizeof(recName));
         memset(strValue, 0, sizeof(strValue));
         snprintf(recName, sizeof(recName), MacFilter, instance_number, index);
-        str = PSM_Get_Record_Status(recName, strValue);
+        str = PSM_Get_Record_Status(recName, strValue, sizeof(strValue));
         if (str != NULL) {
             strcpy(temp_psm_mac_param->mac, str);
             str_tolower(temp_psm_mac_param->mac);
@@ -323,7 +326,7 @@ void CosaDmlWiFiGetFromPSM(void)
             memset(recName, 0, sizeof(recName));
             memset(strValue, 0, sizeof(strValue));
             snprintf(recName, sizeof(recName), Tscan, instance_number);
-            str = PSM_Get_Record_Status(recName, strValue);
+            str = PSM_Get_Record_Status(recName, strValue, sizeof(strValue));
             if (str != NULL) {
                 psm_radio_feat_param->Tscan = _ansc_atoi(str);
                 wifi_util_dbg_print(WIFI_PSM,"psm_radio_feat_param->Tscan is %d and str is %s and _ansc_atoi(str) is %d\n", psm_radio_feat_param->Tscan, str, _ansc_atoi(str));
@@ -335,7 +338,7 @@ void CosaDmlWiFiGetFromPSM(void)
             memset(recName, 0, sizeof(recName));
             memset(strValue, 0, sizeof(strValue));
             snprintf(recName, sizeof(recName), Nscan, instance_number);
-            str = PSM_Get_Record_Status(recName, strValue);
+            str = PSM_Get_Record_Status(recName, strValue, sizeof(strValue));
             if (str != NULL) {
                 psm_radio_feat_param->Nscan = _ansc_atoi(str);
                 wifi_util_dbg_print(WIFI_PSM,"psm_radio_feat_param->Nscan is %d and str is %s and _ansc_atoi(str) is %d\n", psm_radio_feat_param->Nscan, str, _ansc_atoi(str));
@@ -347,7 +350,7 @@ void CosaDmlWiFiGetFromPSM(void)
             memset(recName, 0, sizeof(recName));
             memset(strValue, 0, sizeof(strValue));
             snprintf(recName, sizeof(recName), Tidle, instance_number);
-            str = PSM_Get_Record_Status(recName, strValue);
+            str = PSM_Get_Record_Status(recName, strValue, sizeof(strValue));
             if (str != NULL) {
                 psm_radio_feat_param->Tidle = _ansc_atoi(str);
                 wifi_util_dbg_print(WIFI_PSM,"psm_radio_feat_param->Tidle is %d and str is %s and _ansc_atoi(str) is %d\n",psm_radio_feat_param->Tidle, str, _ansc_atoi(str));
@@ -361,7 +364,7 @@ void CosaDmlWiFiGetFromPSM(void)
         memset(recName, 0, sizeof(recName));
         memset(strValue, 0, sizeof(strValue));
         snprintf(recName, sizeof(recName), CTSProtection, instance_number);
-        str = PSM_Get_Record_Status(recName, strValue);
+        str = PSM_Get_Record_Status(recName, strValue, sizeof(strValue));
         if (str != NULL) {
             psm_radio_param->cts_protection = _ansc_atoi(str);
             wifi_util_dbg_print(WIFI_PSM,"psm_radio_param->cts_protection is %d and str is %s and _ansc_atoi(str) is %d\n", psm_radio_param->cts_protection, str, _ansc_atoi(str));
@@ -373,7 +376,7 @@ void CosaDmlWiFiGetFromPSM(void)
         memset(recName, 0, sizeof(recName));
         memset(strValue, 0, sizeof(strValue));
         snprintf(recName, sizeof(recName), BeaconInterval, instance_number);
-        str = PSM_Get_Record_Status(recName, strValue);
+        str = PSM_Get_Record_Status(recName, strValue, sizeof(strValue));
         if (str != NULL) {
             psm_radio_param->beacon_interval = _ansc_atoi(str);
             wifi_util_dbg_print(WIFI_PSM,"cfg->beacon_interval is %d and str is %s and _ansc_atoi(str) is %d\n", psm_radio_param->beacon_interval, str, _ansc_atoi(str));
@@ -385,7 +388,7 @@ void CosaDmlWiFiGetFromPSM(void)
         memset(recName, 0, sizeof(recName));
         memset(strValue, 0, sizeof(strValue));
         snprintf(recName, sizeof(recName), DTIMInterval, instance_number);
-        str = PSM_Get_Record_Status(recName, strValue);
+        str = PSM_Get_Record_Status(recName, strValue, sizeof(strValue));
         if (str != NULL) {
             psm_radio_param->dtim_period = _ansc_atoi(str);
             wifi_util_dbg_print(WIFI_PSM,"cfg->dtim_period is %d and str is %s and _ansc_atoi(str) is %d\n", psm_radio_param->dtim_period, str, _ansc_atoi(str));
@@ -397,7 +400,7 @@ void CosaDmlWiFiGetFromPSM(void)
         memset(recName, 0, sizeof(recName));
         memset(strValue, 0, sizeof(strValue));
         snprintf(recName, sizeof(recName), FragThreshold, instance_number);
-        str = PSM_Get_Record_Status(recName, strValue);
+        str = PSM_Get_Record_Status(recName, strValue, sizeof(strValue));
         if (str != NULL) {
             psm_radio_param->fragmentation_threshold = _ansc_atoi(str);
             wifi_util_dbg_print(WIFI_PSM,"cfg->fragmentation_threshold is %d and str is %s and _ansc_atoi(str) is %d\n", psm_radio_param->fragmentation_threshold, str, _ansc_atoi(str));
@@ -409,7 +412,7 @@ void CosaDmlWiFiGetFromPSM(void)
         memset(recName, 0, sizeof(recName));
         memset(strValue, 0, sizeof(strValue));
         snprintf(recName, sizeof(recName), RTSThreshold, instance_number);
-        str = PSM_Get_Record_Status(recName, strValue);
+        str = PSM_Get_Record_Status(recName, strValue, sizeof(strValue));
         if (str != NULL) {
             psm_radio_param->rts_threshold = _ansc_atoi(str);
             wifi_util_dbg_print(WIFI_PSM,"cfg->rts_threshold is %d and str is %s and _ansc_atoi(str) is %d\n", psm_radio_param->rts_threshold, str, _ansc_atoi(str));
@@ -421,7 +424,7 @@ void CosaDmlWiFiGetFromPSM(void)
         memset(recName, 0, sizeof(recName));
         memset(strValue, 0, sizeof(strValue));
         snprintf(recName, sizeof(recName), ObssCoex, instance_number);
-        str = PSM_Get_Record_Status(recName, strValue);
+        str = PSM_Get_Record_Status(recName, strValue, sizeof(strValue));
         if (str != NULL) {
             psm_radio_param->obss_coex = _ansc_atoi(str);
             wifi_util_dbg_print(WIFI_PSM,"cfg->obss_coex is %d and str is %s and _ansc_atoi(str) is %d\n", psm_radio_param->obss_coex, str, _ansc_atoi(str));
@@ -433,7 +436,7 @@ void CosaDmlWiFiGetFromPSM(void)
         memset(recName, 0, sizeof(recName));
         memset(strValue, 0, sizeof(strValue));
         snprintf(recName, sizeof(recName), STBCEnable, instance_number);
-        str = PSM_Get_Record_Status(recName, strValue);
+        str = PSM_Get_Record_Status(recName, strValue, sizeof(strValue));
         if (str != NULL) {
             psm_radio_param->stbc_enable = _ansc_atoi(str);
             wifi_util_dbg_print(WIFI_PSM,"cfg->stbc_enable is %d and str is %s and _ansc_atoi(str) is %d\n", psm_radio_param->stbc_enable, str, _ansc_atoi(str));
@@ -445,7 +448,7 @@ void CosaDmlWiFiGetFromPSM(void)
         memset(recName, 0, sizeof(recName));
         memset(strValue, 0, sizeof(strValue));
         snprintf(recName, sizeof(recName), GuardInterval, instance_number);
-        str = PSM_Get_Record_Status(recName, strValue);
+        str = PSM_Get_Record_Status(recName, strValue, sizeof(strValue));
         if (str != NULL) {
             psm_radio_param->guard_interval = _ansc_atoi(str);
             wifi_util_dbg_print(WIFI_PSM,"cfg->guard_interval is %d and str is %s and _ansc_atoi(str) is %d\n", psm_radio_param->guard_interval, str, _ansc_atoi(str));
@@ -457,7 +460,7 @@ void CosaDmlWiFiGetFromPSM(void)
         memset(recName, 0, sizeof(recName));
         memset(strValue, 0, sizeof(strValue));
         snprintf(recName, sizeof(recName), GreenField, instance_number);
-        str = PSM_Get_Record_Status(recName, strValue);
+        str = PSM_Get_Record_Status(recName, strValue, sizeof(strValue));
         if (str != NULL) {
             psm_radio_param->greenfield_enable = _ansc_atoi(str);
             wifi_util_dbg_print(WIFI_PSM,"cfg->greenfield_enable is %d and str is %s and _ansc_atoi(str) is %d\n", psm_radio_param->greenfield_enable, str, _ansc_atoi(str));
@@ -469,7 +472,7 @@ void CosaDmlWiFiGetFromPSM(void)
         memset(recName, 0, sizeof(recName));
         memset(strValue, 0, sizeof(strValue));
         snprintf(recName, sizeof(recName), TransmitPower, instance_number);
-        str = PSM_Get_Record_Status(recName, strValue);
+        str = PSM_Get_Record_Status(recName, strValue, sizeof(strValue));
         if (str != NULL) {
             psm_radio_param->transmit_power = _ansc_atoi(str);
             wifi_util_dbg_print(WIFI_PSM,"cfg->transmit_power is %d and str is %s and _ansc_atoi(str) is %d\n", psm_radio_param->transmit_power, str, _ansc_atoi(str));
@@ -481,7 +484,7 @@ void CosaDmlWiFiGetFromPSM(void)
         memset(recName, 0, sizeof(recName));
         memset(strValue, 0, sizeof(strValue));
         snprintf(recName, sizeof(recName), UserControl, instance_number);
-        str = PSM_Get_Record_Status(recName, strValue);
+        str = PSM_Get_Record_Status(recName, strValue, sizeof(strValue));
         if (str != NULL) {
             psm_radio_param->user_control = _ansc_atoi(str);
             wifi_util_dbg_print(WIFI_PSM,"cfg->user_control is %d and str is %s and _ansc_atoi(str) is %d\n", psm_radio_param->user_control, str, _ansc_atoi(str));
@@ -493,7 +496,7 @@ void CosaDmlWiFiGetFromPSM(void)
         memset(recName, 0, sizeof(recName));
         memset(strValue, 0, sizeof(strValue));
         snprintf(recName, sizeof(recName), AdminControl, instance_number);
-        str = PSM_Get_Record_Status(recName, strValue);
+        str = PSM_Get_Record_Status(recName, strValue, sizeof(strValue));
         if (str != NULL) {
             psm_radio_param->admin_control = _ansc_atoi(str);
             wifi_util_dbg_print(WIFI_PSM,"cfg->admin_control is %d and str is %s and _ansc_atoi(str) is %d\n", psm_radio_param->admin_control, str, _ansc_atoi(str));
@@ -505,7 +508,7 @@ void CosaDmlWiFiGetFromPSM(void)
         memset(recName, 0, sizeof(recName));
         memset(strValue, 0, sizeof(strValue));
         snprintf(recName, sizeof(recName), MeasuringRateRd, instance_number);
-        str = PSM_Get_Record_Status(recName, strValue);
+        str = PSM_Get_Record_Status(recName, strValue, sizeof(strValue));
         if (str != NULL) {
             psm_radio_param->radio_stats_measuring_rate = _ansc_atoi(str);
             wifi_util_dbg_print(WIFI_PSM,"cfg->radio_stats_measuring_rate is %d and str is %s and _ansc_atoi(str) is %d\n", psm_radio_param->radio_stats_measuring_rate, str, _ansc_atoi(str));
@@ -517,7 +520,7 @@ void CosaDmlWiFiGetFromPSM(void)
         memset(recName, 0, sizeof(recName));
         memset(strValue, 0, sizeof(strValue));
         snprintf(recName, sizeof(recName), MeasuringIntervalRd, instance_number);
-        str = PSM_Get_Record_Status(recName, strValue);
+        str = PSM_Get_Record_Status(recName, strValue, sizeof(strValue));
         if (str != NULL) {
             psm_radio_param->radio_stats_measuring_interval = _ansc_atoi(str);
             wifi_util_dbg_print(WIFI_PSM,"cfg->radio_stats_measuring_interval is %d and str is %s and _ansc_atoi(str) is %d\n", psm_radio_param->radio_stats_measuring_interval, str, _ansc_atoi(str));
@@ -529,7 +532,7 @@ void CosaDmlWiFiGetFromPSM(void)
         memset(recName, 0, sizeof(recName));
         memset(strValue, 0, sizeof(strValue));
         snprintf(recName, sizeof(recName), SetChanUtilThreshold, instance_number);
-        str = PSM_Get_Record_Status(recName, strValue);
+        str = PSM_Get_Record_Status(recName, strValue, sizeof(strValue));
         if (str != NULL) {
             psm_radio_param->chan_util_threshold = _ansc_atoi(str);
             wifi_util_dbg_print(WIFI_PSM,"cfg->chan_util_threshold is %d and str is %s and _ansc_atoi(str) is %d\n", psm_radio_param->chan_util_threshold, str, _ansc_atoi(str));
@@ -541,7 +544,7 @@ void CosaDmlWiFiGetFromPSM(void)
         memset(recName, 0, sizeof(recName));
         memset(strValue, 0, sizeof(strValue));
         snprintf(recName, sizeof(recName), SetChanUtilSelfHealEnable, instance_number);
-        str = PSM_Get_Record_Status(recName, strValue);
+        str = PSM_Get_Record_Status(recName, strValue, sizeof(strValue));
         if (str != NULL) {
             psm_radio_param->chan_util_selfheal_enable = _ansc_atoi(str);
             wifi_util_dbg_print(WIFI_PSM,"cfg->chan_util_selfheal_enable is %d and str is %s and _ansc_atoi(str) is %d\n", psm_radio_param->chan_util_selfheal_enable, str, _ansc_atoi(str));
@@ -570,7 +573,7 @@ void CosaDmlWiFiGetFromPSM(void)
             memset(recName, 0, sizeof(recName));
             memset(strValue, 0, sizeof(strValue));
             snprintf(recName, sizeof(recName), WmmEnable, instance_number);
-            str = PSM_Get_Record_Status(recName, strValue);
+            str = PSM_Get_Record_Status(recName, strValue, sizeof(strValue));
             if (str != NULL) {
                 psm_vap_param->wmm_enabled = _ansc_atoi(str);
                 wifi_util_dbg_print(WIFI_PSM,"cfg->wmm_enabled is %d and str is %s and _ansc_atoi(str) is %d\n", psm_vap_param->wmm_enabled, str, _ansc_atoi(str));
@@ -582,7 +585,7 @@ void CosaDmlWiFiGetFromPSM(void)
             memset(recName, 0, sizeof(recName));
             memset(strValue, 0, sizeof(strValue));
             snprintf(recName, sizeof(recName), UAPSDEnable, instance_number);
-            str = PSM_Get_Record_Status(recName, strValue);
+            str = PSM_Get_Record_Status(recName, strValue, sizeof(strValue));
             if (str != NULL) {
                 psm_vap_param->uapsd_enabled = _ansc_atoi(str);
                 wifi_util_dbg_print(WIFI_PSM,"cfg->uapsd_enabled is %d and str is %s and _ansc_atoi(str) is %d\n", psm_vap_param->uapsd_enabled, str, _ansc_atoi(str));
@@ -594,7 +597,7 @@ void CosaDmlWiFiGetFromPSM(void)
             memset(recName, 0, sizeof(recName));
             memset(strValue, 0, sizeof(strValue));
             snprintf(recName, sizeof(recName), vAPStatsEnable, instance_number);
-            str = PSM_Get_Record_Status(recName, strValue);
+            str = PSM_Get_Record_Status(recName, strValue, sizeof(strValue));
             if (str != NULL) {
                 convert_ascii_string_to_bool(str, &psm_vap_param->vap_stats_enable);
                 wifi_util_dbg_print(WIFI_PSM,"cfg->vap_stats_enable is %d and str is %s\n", psm_vap_param->vap_stats_enable, str);
@@ -606,7 +609,7 @@ void CosaDmlWiFiGetFromPSM(void)
             memset(recName, 0, sizeof(recName));
             memset(strValue, 0, sizeof(strValue));
             snprintf(recName, sizeof(recName), WmmNoAck, instance_number);
-            str = PSM_Get_Record_Status(recName, strValue);
+            str = PSM_Get_Record_Status(recName, strValue, sizeof(strValue));
             if (str != NULL) {
                 psm_vap_param->wmm_noack = _ansc_atoi(str);
                 wifi_util_dbg_print(WIFI_PSM,"cfg->wmm_noack is %d and str is %s and _ansc_atoi(str) is %d\n", psm_vap_param->wmm_noack, str, _ansc_atoi(str));
@@ -618,7 +621,7 @@ void CosaDmlWiFiGetFromPSM(void)
             memset(recName, 0, sizeof(recName));
             memset(strValue, 0, sizeof(strValue));
             snprintf(recName, sizeof(recName), BssMaxNumSta, instance_number);
-            str = PSM_Get_Record_Status(recName, strValue);
+            str = PSM_Get_Record_Status(recName, strValue, sizeof(strValue));
             if (str != NULL) {
                 psm_vap_param->bss_max_sta = _ansc_atoi(str);
                 wifi_util_dbg_print(WIFI_PSM,"cfg->bss_max_sta is %d and str is %s and _ansc_atoi(str) is %d\n", psm_vap_param->bss_max_sta, str, _ansc_atoi(str));
@@ -630,7 +633,7 @@ void CosaDmlWiFiGetFromPSM(void)
             memset(recName, 0, sizeof(recName));
             memset(strValue, 0, sizeof(strValue));
             snprintf(recName, sizeof(recName), MacFilterMode, instance_number);
-            str = PSM_Get_Record_Status(recName, strValue);
+            str = PSM_Get_Record_Status(recName, strValue, sizeof(strValue));
             if (str != NULL) {
                 unsigned int mf_mode = _ansc_atoi(str);
                 if (mf_mode == 0) {
@@ -652,7 +655,7 @@ void CosaDmlWiFiGetFromPSM(void)
             memset(recName, 0, sizeof(recName));
             memset(strValue, 0, sizeof(strValue));
             snprintf(recName, sizeof(recName), ApIsolationEnable, instance_number);
-            str = PSM_Get_Record_Status(recName, strValue);
+            str = PSM_Get_Record_Status(recName, strValue, sizeof(strValue));
             if (str != NULL) {
                 psm_vap_param->isolation_enabled = _ansc_atoi(str);
                 wifi_util_dbg_print(WIFI_PSM,"cfg->isolation_enabled is %d and str is %s and _ansc_atoi(str) is %d\n", psm_vap_param->isolation_enabled, str, _ansc_atoi(str));
@@ -664,7 +667,7 @@ void CosaDmlWiFiGetFromPSM(void)
             memset(recName, 0, sizeof(recName));
             memset(strValue, 0, sizeof(strValue));
             snprintf(recName, sizeof(recName), BSSTransitionActivated, instance_number);
-            str = PSM_Get_Record_Status(recName, strValue);
+            str = PSM_Get_Record_Status(recName, strValue, sizeof(strValue));
             if (str != NULL) {
                 convert_ascii_string_to_bool(str, &psm_vap_param->bss_transition_activated);
                 wifi_util_dbg_print(WIFI_PSM,"cfg->bss_transition_activated is %d and str is %s\n", psm_vap_param->bss_transition_activated, str);
@@ -676,7 +679,7 @@ void CosaDmlWiFiGetFromPSM(void)
             memset(recName, 0, sizeof(recName));
             memset(strValue, 0, sizeof(strValue));
             snprintf(recName, sizeof(recName), BssHotSpot, instance_number);
-            str = PSM_Get_Record_Status(recName, strValue);
+            str = PSM_Get_Record_Status(recName, strValue, sizeof(strValue));
             if (str != NULL) {
                 psm_vap_param->bss_hotspot = _ansc_atoi(str);
                 wifi_util_dbg_print(WIFI_PSM,"cfg->bss_hotspot is %d and str is %s and _ansc_atoi(str) is %d\n", psm_vap_param->bss_hotspot, str, _ansc_atoi(str));
@@ -688,7 +691,7 @@ void CosaDmlWiFiGetFromPSM(void)
             memset(recName, 0, sizeof(recName));
             memset(strValue, 0, sizeof(strValue));
             snprintf(recName, sizeof(recName), WpsPushButton, instance_number);
-            str = PSM_Get_Record_Status(recName, strValue);
+            str = PSM_Get_Record_Status(recName, strValue, sizeof(strValue));
             if (str != NULL) {
                 psm_vap_param->wps_push_button = _ansc_atoi(str);
                 wifi_util_dbg_print(WIFI_PSM,"cfg->wps_push_button is %d and str is %s and _ansc_atoi(str) is %d\n", psm_vap_param->wps_push_button, str, _ansc_atoi(str));
@@ -700,7 +703,7 @@ void CosaDmlWiFiGetFromPSM(void)
             memset(recName, 0, sizeof(recName));
             memset(strValue, 0, sizeof(strValue));
             snprintf(recName, sizeof(recName), RapidReconnThreshold, instance_number);
-            str = PSM_Get_Record_Status(recName, strValue);
+            str = PSM_Get_Record_Status(recName, strValue, sizeof(strValue));
             if (str != NULL) {
                 psm_vap_param->rapid_connect_threshold = _ansc_atoi(str);
                 wifi_util_dbg_print(WIFI_PSM,"cfg->rapid_connect_threshold is %d and str is %s and _ansc_atoi(str) is %d\n", psm_vap_param->rapid_connect_threshold, str, _ansc_atoi(str));
@@ -712,7 +715,7 @@ void CosaDmlWiFiGetFromPSM(void)
             memset(recName, 0, sizeof(recName));
             memset(strValue, 0, sizeof(strValue));
             snprintf(recName, sizeof(recName), RapidReconnCountEnable, instance_number);
-            str = PSM_Get_Record_Status(recName, strValue);
+            str = PSM_Get_Record_Status(recName, strValue, sizeof(strValue));
             if (str != NULL) {
                 psm_vap_param->rapid_connect_enable = _ansc_atoi(str);
                 wifi_util_dbg_print(WIFI_PSM,"cfg->rapid_connect_enable is %d and str is %s and _ansc_atoi(str) is %d\n", psm_vap_param->rapid_connect_enable, str, _ansc_atoi(str));
@@ -724,7 +727,7 @@ void CosaDmlWiFiGetFromPSM(void)
             memset(recName, 0, sizeof(recName));
             memset(strValue, 0, sizeof(strValue));
             snprintf(recName, sizeof(recName), NeighborReportActivated, instance_number);
-            str = PSM_Get_Record_Status(recName, strValue);
+            str = PSM_Get_Record_Status(recName, strValue, sizeof(strValue));
             if (str != NULL) {
                 convert_ascii_string_to_bool(str, &psm_vap_param->nbr_report_activated);
                 wifi_util_dbg_print(WIFI_PSM,"cfg->nbr_report_activated is %d and str is %s\n", psm_vap_param->nbr_report_activated, str);
@@ -736,7 +739,7 @@ void CosaDmlWiFiGetFromPSM(void)
             memset(recName, 0, sizeof(recName));
             memset(strValue, 0, sizeof(strValue));
             snprintf(recName, sizeof(recName), ApMFPConfig, instance_number);
-            str = PSM_Get_Record_Status(recName, strValue);
+            str = PSM_Get_Record_Status(recName, strValue, sizeof(strValue));
             if (str != NULL) {
                 strcpy(psm_vap_param->mfp, str);
                 wifi_util_dbg_print(WIFI_PSM,"cfg->mfp is %s and str is %s\n", psm_vap_param->mfp, str);
@@ -773,7 +776,7 @@ void CosaDmlWiFiGetFromPSM(void)
     wifidb_init_global_config_default(&global_cfg);
 
      memset(strValue, 0, sizeof(strValue));
-     str = PSM_Get_Record_Status(WiFivAPStatsFeatureEnable, strValue);
+     str = PSM_Get_Record_Status(WiFivAPStatsFeatureEnable, strValue, sizeof(strValue));
      if (str != NULL) {
          convert_ascii_string_to_bool(str, &psm_global_param->vap_stats_feature);
          wifi_util_dbg_print(WIFI_PSM,"cfg->vap_stats_feature is %d and str is %s\n", psm_global_param->vap_stats_feature, str);
@@ -789,7 +792,7 @@ void CosaDmlWiFiGetFromPSM(void)
     wifi_util_dbg_print(WIFI_PSM,":%s:%d set default value for PreferPrivate: %d : %d\r\n", __func__, __LINE__, global_cfg.prefer_private, psm_global_param->prefer_private);
 
     memset(strValue, 0, sizeof(strValue));
-    str = PSM_Get_Record_Status(NotifyWiFiChanges, strValue);
+    str = PSM_Get_Record_Status(NotifyWiFiChanges, strValue, sizeof(strValue));
     if (str != NULL) {
         convert_ascii_string_to_bool(str, &psm_global_param->notify_wifi_changes);
         wifi_util_dbg_print(WIFI_PSM,"cfg->notify_wifi_changes is %d and str is %s\n", psm_global_param->notify_wifi_changes, str);
@@ -799,7 +802,7 @@ void CosaDmlWiFiGetFromPSM(void)
      }
 
     memset(strValue, 0, sizeof(strValue));
-    str = PSM_Get_Record_Status(DiagnosticEnable, strValue);
+    str = PSM_Get_Record_Status(DiagnosticEnable, strValue, sizeof(strValue));
     if (str != NULL) {
         psm_global_param->diagnostic_enable = _ansc_atoi(str);
         wifi_util_dbg_print(WIFI_PSM,"cfg->diagnostic_enable is %d and str is %s and _ansc_atoi(str) is %d\n", psm_global_param->diagnostic_enable, str, _ansc_atoi(str));
@@ -809,7 +812,7 @@ void CosaDmlWiFiGetFromPSM(void)
      }
 
     memset(strValue, 0, sizeof(strValue));
-    str = PSM_Get_Record_Status(GoodRssiThreshold, strValue);
+    str = PSM_Get_Record_Status(GoodRssiThreshold, strValue, sizeof(strValue));
     if (str != NULL) {
         psm_global_param->good_rssi_threshold = _ansc_atoi(str);
         wifi_util_dbg_print(WIFI_PSM,"cfg->good_rssi_threshold is %d and str is %s and _ansc_atoi(str) is %d\n", psm_global_param->good_rssi_threshold, str, _ansc_atoi(str));
@@ -819,7 +822,7 @@ void CosaDmlWiFiGetFromPSM(void)
      }
 
     memset(strValue, 0, sizeof(strValue));
-    str = PSM_Get_Record_Status(AssocCountThreshold, strValue);
+    str = PSM_Get_Record_Status(AssocCountThreshold, strValue, sizeof(strValue));
     if (str != NULL) {
         psm_global_param->assoc_count_threshold = _ansc_atoi(str);
         wifi_util_dbg_print(WIFI_PSM,"cfg->assoc_count_threshold is %d and str is %s and _ansc_atoi(str) is %d\n", psm_global_param->assoc_count_threshold, str, _ansc_atoi(str));
@@ -829,7 +832,7 @@ void CosaDmlWiFiGetFromPSM(void)
     }
 
     memset(strValue, 0, sizeof(strValue));
-    str = PSM_Get_Record_Status(AssocMonitorDuration, strValue);
+    str = PSM_Get_Record_Status(AssocMonitorDuration, strValue, sizeof(strValue));
     if (str != NULL) {
         psm_global_param->assoc_monitor_duration = _ansc_atoi(str);
         wifi_util_dbg_print(WIFI_PSM,"cfg->assoc_monitor_duration is %d and str is %s and _ansc_atoi(str) is %d\n", psm_global_param->assoc_monitor_duration, str, _ansc_atoi(str));
@@ -839,7 +842,7 @@ void CosaDmlWiFiGetFromPSM(void)
     }
 
     memset(strValue, 0, sizeof(strValue));
-    str = PSM_Get_Record_Status(AssocGateTime, strValue);
+    str = PSM_Get_Record_Status(AssocGateTime, strValue, sizeof(strValue));
     if (str != NULL) {
         psm_global_param->assoc_gate_time = _ansc_atoi(str);
         wifi_util_dbg_print(WIFI_PSM,"cfg->assoc_gate_time is %d and str is %s and _ansc_atoi(str) is %d\n", psm_global_param->assoc_gate_time, str, _ansc_atoi(str));
@@ -849,7 +852,7 @@ void CosaDmlWiFiGetFromPSM(void)
     }
 
     memset(strValue, 0, sizeof(strValue));
-    str = PSM_Get_Record_Status(RapidReconnectIndicationEnable, strValue);
+    str = PSM_Get_Record_Status(RapidReconnectIndicationEnable, strValue, sizeof(strValue));
     if (str != NULL) {
         convert_ascii_string_to_bool(str, &psm_global_param->rapid_reconnect_enable);
         wifi_util_dbg_print(WIFI_PSM,"cfg->rapid_reconnect_enable is %d and str is %s\n", psm_global_param->rapid_reconnect_enable, str);
@@ -859,7 +862,7 @@ void CosaDmlWiFiGetFromPSM(void)
     }
 
     memset(strValue, 0, sizeof(strValue));
-    str = PSM_Get_Record_Status(FeatureMFPConfig, strValue);
+    str = PSM_Get_Record_Status(FeatureMFPConfig, strValue, sizeof(strValue));
     if (str != NULL) {
         psm_global_param->mfp_config_feature = _ansc_atoi(str);
         wifi_util_dbg_print(WIFI_PSM,"cfg->mfp_config_feature is %d and str is %s and _ansc_atoi(str) is %d\n", psm_global_param->mfp_config_feature, str, _ansc_atoi(str));
@@ -869,7 +872,7 @@ void CosaDmlWiFiGetFromPSM(void)
     }
 
     memset(strValue, 0, sizeof(strValue));
-    str = PSM_Get_Record_Status(WiFiTxOverflowSelfheal, strValue);
+    str = PSM_Get_Record_Status(WiFiTxOverflowSelfheal, strValue, sizeof(strValue));
     if (str != NULL) {
         convert_ascii_string_to_bool(str, &psm_global_param->tx_overflow_selfheal);
         wifi_util_dbg_print(WIFI_PSM,"cfg->tx_overflow_selfheal is %d and str is %s\n", psm_global_param->tx_overflow_selfheal, str);
@@ -879,7 +882,7 @@ void CosaDmlWiFiGetFromPSM(void)
     }
 
     memset(strValue, 0, sizeof(strValue));
-    str = PSM_Get_Record_Status(WiFiForceDisableWiFiRadio, strValue);
+    str = PSM_Get_Record_Status(WiFiForceDisableWiFiRadio, strValue, sizeof(strValue));
     if (str != NULL) {
         convert_ascii_string_to_bool(str, &psm_global_param->force_disable_radio_feature);
         wifi_util_dbg_print(WIFI_PSM,"cfg->force_disable_radio_feature is %d and str is %s\n", psm_global_param->force_disable_radio_feature, str);
@@ -889,7 +892,7 @@ void CosaDmlWiFiGetFromPSM(void)
     }
 
     memset(strValue, 0, sizeof(strValue));
-    str = PSM_Get_Record_Status(WiFiForceDisableRadioStatus, strValue);
+    str = PSM_Get_Record_Status(WiFiForceDisableRadioStatus, strValue, sizeof(strValue));
     if (str != NULL) {
         psm_global_param->force_disable_radio_status = _ansc_atoi(str);
         wifi_util_dbg_print(WIFI_PSM,"cfg->force_disable_radio_status is %d and str is %s and _ansc_atoi(str) is %d\n", psm_global_param->force_disable_radio_status, str, _ansc_atoi(str));
@@ -899,7 +902,7 @@ void CosaDmlWiFiGetFromPSM(void)
     }
 
     memset(strValue, 0, sizeof(strValue));
-    str = PSM_Get_Record_Status(ValidateSSIDName, strValue);
+    str = PSM_Get_Record_Status(ValidateSSIDName, strValue, sizeof(strValue));
     if (str != NULL) {
         psm_global_param->validate_ssid = _ansc_atoi(str);
         wifi_util_dbg_print(WIFI_PSM,"cfg->validate_ssid is %d and str is %s and _ansc_atoi(str) is %d\n", psm_global_param->validate_ssid, str, _ansc_atoi(str));
@@ -912,7 +915,7 @@ void CosaDmlWiFiGetFromPSM(void)
     wifi_util_dbg_print(WIFI_PSM,":%s:%d set default value for FixedWmmParams: %d : %d\r\n", __func__, __LINE__, global_cfg.fixed_wmm_params, psm_global_param->fixed_wmm_params);
 
     memset(strValue, 0, sizeof(strValue));
-    str = PSM_Get_Record_Status(TR181_WIFIREGION_Code, strValue);
+    str = PSM_Get_Record_Status(TR181_WIFIREGION_Code, strValue, sizeof(strValue));
     if (str != NULL) {
         strcpy(psm_global_param->wifi_region_code, str);
         wifi_util_dbg_print(WIFI_PSM,"cfg->wifi_region_code is %s and str is %s \n", psm_global_param->wifi_region_code, str);
@@ -1021,6 +1024,7 @@ void CosaDmlWiFiGetRFCDataFromPSM(void)
 
    // bool rfc;
     char recName[256] = {0x0};
+    char scan_strValue[256] = {0};
 
     memset(recName, 0, sizeof(recName));
 
@@ -1051,8 +1055,9 @@ void CosaDmlWiFiGetRFCDataFromPSM(void)
 #if defined (FEATURE_OFF_CHANNEL_SCAN_5G)
     bool q_offchannelscan_RFC;
     char *str1 = NULL;
+    memset(scan_strValue, 0, sizeof(scan_strValue));
     str1 = PSM_Get_Record_Status("Device.DeviceInfo.X_RDK_RFC.Feature.WifiOffChannelScan.Enable",
-        strValue);
+        scan_strValue, sizeof(scan_strValue));
     if (str1 != NULL) {
         q_offchannelscan_RFC = _ansc_atoi(str1);
     } else {
@@ -1064,8 +1069,9 @@ void CosaDmlWiFiGetRFCDataFromPSM(void)
 #endif // FEATURE_OFF_CHANNEL_SCAN_5G
     bool l_offchannelscan_RFC;
     char *str = NULL;
+    memset(scan_strValue, 0, sizeof(scan_strValue));
     str = PSM_Get_Record_Status("Device.DeviceInfo.X_RDK_RFC.Feature.OffChannelScan.Enable",
-        strValue);
+        scan_strValue, sizeof(scan_strValue));
     if (str != NULL) {
         l_offchannelscan_RFC = _ansc_atoi(str);
     } else {

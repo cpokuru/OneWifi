@@ -242,26 +242,31 @@ void selfheal_event_publish(wifi_ctrl_t *ctrl)
 
 void sta_selfheal_handing(wifi_ctrl_t *ctrl, vap_svc_t *l_svc)
 {
-    static bool radio_reset_triggered      = false;
-    static unsigned int disconnected_time  = 0;
+    if (ctrl->rf_status_down == true) {
+        wifi_util_dbg_print(WIFI_CTRL, "%s:%d Sta selfheal mode deactivated due to Ignite mode\n",
+            __func__, __LINE__);
+        return;
+    }
+    static bool radio_reset_triggered = false;
+    static unsigned int disconnected_time = 0;
     static unsigned int connection_timeout = 0;
-    vap_svc_ext_t   *ext;
+    vap_svc_ext_t *ext;
     ext = &l_svc->u.ext;
 
     /* Reboot device is STA connection is unsuccessful */
     if ((ext != NULL) && (ext->conn_state != connection_state_connected)) {
         disconnected_time++;
         connection_timeout++;
-        wifi_util_info_print(WIFI_CTRL,"%s:%d selfheal STA Connection Timeout  event publish time is set to %d minutes, disconnected_time:%d\n",
-                        __func__, __LINE__, selfheal_event_publish_time(), disconnected_time);
+        wifi_util_info_print(WIFI_CTRL,"%s:%d selfheal STA Connection Timeout  event publish time is set to %d minutes, disconnected_time:%d\n", __func__, __LINE__, selfheal_event_publish_time(), disconnected_time); 
         if ((disconnected_time * STA_CONN_RETRY_TIMEOUT) > (selfheal_event_publish_time() * 60)) {
-            wifi_util_error_print(WIFI_CTRL,"%s:%d selfheal: STA connection failed for %d minutes, publish selfheal connection timeout\n",
-                            __func__, __LINE__, selfheal_event_publish_time());
+            wifi_util_error_print(WIFI_CTRL, "%s:%d selfheal: STA connection failed for %d minutes, publish selfheal "
+                "connection timeout\n", __func__, __LINE__, selfheal_event_publish_time());
             /* publish selfheal STA Connection Timeout  device */
             selfheal_event_publish(ctrl);
             disconnected_time = 0;
             connection_timeout = 0;
-        } else if (((disconnected_time * STA_CONN_RETRY_TIMEOUT) >= ((selfheal_event_publish_time() * 60) / 2)) && (radio_reset_triggered == false)) {
+        } else if (((disconnected_time * STA_CONN_RETRY_TIMEOUT) >= ((selfheal_event_publish_time() * 60) / 2)) &&
+(radio_reset_triggered == false)) {
             reset_wifi_radios();
             radio_reset_triggered = true;
         } else if ((connection_timeout * STA_CONN_RETRY_TIMEOUT) >= MAX_CONNECTION_ALGO_TIMEOUT) {
@@ -278,10 +283,11 @@ void sta_selfheal_handing(wifi_ctrl_t *ctrl, vap_svc_t *l_svc)
 bool is_sta_enabled(void)
 {
     wifi_ctrl_t *ctrl = (wifi_ctrl_t *)get_wifictrl_obj();
-    //wifi_util_dbg_print(WIFI_CTRL,"[%s:%d] device mode:%d active_gw_check:%d\r\n",
-    //    __func__, __LINE__, ctrl->network_mode, ctrl->active_gw_check);
-    return ((ctrl->network_mode == rdk_dev_mode_type_ext || ctrl->active_gw_check == true) &&
-        ctrl->eth_bh_status == false);
+    wifi_util_dbg_print(WIFI_CTRL,"[%s:%d] device mode:%d active_gw_check:%d and rf_status_down=%d\r\n",
+       __func__, __LINE__, ctrl->network_mode, ctrl->active_gw_check,  ctrl->rf_status_down);
+   return ((ctrl->network_mode == rdk_dev_mode_type_ext ||
+              ctrl->network_mode == rdk_dev_mode_type_em_node || ctrl->active_gw_check == true || 
+              ctrl->rf_status_down == true ) &&  ctrl->eth_bh_status == false);
 }
 
 void ctrl_queue_loop(wifi_ctrl_t *ctrl)
@@ -417,18 +423,16 @@ unsigned int get_Uptime(void)
 unsigned int dfs_fallback_channel(wifi_platform_property_t *wifi_prop, wifi_freq_bands_t wifi_band)
 {
     unsigned int channel = 0;
-    int non_dfs_channel_list_5g[] = { 36, 40, 44, 48, 149, 153, 157, 161, 165 };
-    int num_channels = sizeof(non_dfs_channel_list_5g) / sizeof(non_dfs_channel_list_5g[0]);
+    int non_dfs_channel_list_5g[] = {36, 40, 44, 48, 149, 153, 157, 161, 165};
+    int num_channels = sizeof(non_dfs_channel_list_5g)/sizeof(non_dfs_channel_list_5g[0]);
 
     for (int i = 0; i < num_channels; i++) {
-        if ((is_wifi_channel_valid(wifi_prop, wifi_band, non_dfs_channel_list_5g[i])) ==
-            RETURN_OK) {
+        if ((is_wifi_channel_valid(wifi_prop, wifi_band, non_dfs_channel_list_5g[i])) == RETURN_OK) {
             channel = non_dfs_channel_list_5g[i];
             break;
         }
     }
-    wifi_util_info_print(WIFI_CTRL, "%s:%d DFS Fallback channel for band %d is %d\n", __func__,
-        __LINE__, wifi_band, channel);
+    wifi_util_info_print(WIFI_CTRL,"%s:%d DFS Fallback channel for band %d is %d\n", __func__, __LINE__, wifi_band, channel);
     return channel;
 }
 
@@ -439,14 +443,12 @@ int start_radios(rdk_dev_mode_type_t mode)
     uint8_t index = 0;
     uint8_t num_of_radios = getNumberRadios();
     wifi_ctrl_t *ctrl = (wifi_ctrl_t *)get_wifictrl_obj();
-    wifi_platform_property_t *wifi_prop = (wifi_platform_property_t *)get_wifi_hal_cap_prop();
+    wifi_platform_property_t *wifi_prop =  (wifi_platform_property_t *) get_wifi_hal_cap_prop();
 
-    wifi_util_info_print(WIFI_CTRL, "%s(): Start radios %d\n", __FUNCTION__, num_of_radios);
-    // Check for the number of radios
+    wifi_util_info_print(WIFI_CTRL,"%s(): Start radios %d\n", __FUNCTION__, num_of_radios);
+    //Check for the number of radios
     if (num_of_radios > MAX_NUM_RADIOS) {
-        wifi_util_error_print(WIFI_CTRL,
-            "WIFI %s : Number of Radios %d exceeds supported %d Radios \n", __FUNCTION__,
-            getNumberRadios(), MAX_NUM_RADIOS);
+        wifi_util_error_print(WIFI_CTRL,"WIFI %s : Number of Radios %d exceeds supported %d Radios \n",__FUNCTION__, getNumberRadios(), MAX_NUM_RADIOS);
         return RETURN_ERR;
     }
     //Ensure RBUS event not missed in restart. Direct decode call as it is not conventional subdoc.
@@ -460,33 +462,25 @@ int start_radios(rdk_dev_mode_type_t mode)
     for (index = 0; index < num_of_radios; index++) {
         wifi_radio_oper_param = (wifi_radio_operationParam_t *)get_wifidb_radio_map(index);
         if (wifi_radio_oper_param == NULL) {
-            wifi_util_error_print(WIFI_CTRL, "%s:wrong index for radio map: %d\n", __FUNCTION__,
-                index);
+            wifi_util_error_print(WIFI_CTRL,"%s:wrong index for radio map: %d\n",__FUNCTION__, index);
             return RETURN_ERR;
         }
 
-        wifi_util_dbg_print(WIFI_CTRL, "%s:index: %d num_of_radios:%d\n", __FUNCTION__, index,
-            num_of_radios);
+        wifi_util_dbg_print(WIFI_CTRL,"%s:index: %d num_of_radios:%d\n",__FUNCTION__, index, num_of_radios);
 
-        if ((mode == rdk_dev_mode_type_ext) &&
-            (wifi_radio_oper_param->band == WIFI_FREQUENCY_2_4_BAND) &&
-            (wifi_radio_oper_param->channel != 1)) {
+        if((mode == rdk_dev_mode_type_ext) && (wifi_radio_oper_param->band == WIFI_FREQUENCY_2_4_BAND) && (wifi_radio_oper_param->channel != 1)) {
             wifi_radio_oper_param->channel = 1;
-            wifi_util_dbg_print(WIFI_CTRL, "%s: initializing radio_index:%d with channel 1\n",
-                __FUNCTION__, index);
+            wifi_util_dbg_print(WIFI_CTRL,"%s: initializing radio_index:%d with channel 1\n",__FUNCTION__, index);
         }
 
         ctrl->acs_pending[index] = false;
         if (wifi_radio_oper_param->autoChannelEnabled == true) {
             ctrl->acs_pending[index] = true;
-            start_wifi_sched_timer(index, ctrl, wifi_acs_sched); // Starting the acs_scheduler
+            start_wifi_sched_timer(index, ctrl, wifi_acs_sched); //Starting the acs_scheduler
         }
 
-        // In case of reboot/FR, Non DFS channel will be selected and radio will switch to DFS
-        // Channel after 1 min.
-        if ((wifi_radio_oper_param->band == WIFI_FREQUENCY_5_BAND) ||
-            (wifi_radio_oper_param->band == WIFI_FREQUENCY_5L_BAND) ||
-            (wifi_radio_oper_param->band == WIFI_FREQUENCY_5H_BAND)) {
+        //In case of reboot/FR, Non DFS channel will be selected and radio will switch to DFS Channel after 1 min.
+        if( (wifi_radio_oper_param->band == WIFI_FREQUENCY_5_BAND ) || ( wifi_radio_oper_param->band == WIFI_FREQUENCY_5L_BAND ) || ( wifi_radio_oper_param->band == WIFI_FREQUENCY_5H_BAND)) {
             if (wifi_radio_oper_param->channel >= 52 && wifi_radio_oper_param->channel <= 144) {
                 if (mode == rdk_dev_mode_type_gw) {
                     dfs_channel_data_t *dfs_channel_data = (dfs_channel_data_t *)malloc(
@@ -495,10 +489,8 @@ int start_radios(rdk_dev_mode_type_t mode)
                     dfs_channel_data->radio_index = index;
                     dfs_channel_data->dfs_channel = wifi_radio_oper_param->channel;
                     wifi_radio_oper_param->channel = 44;
-                    if ((is_wifi_channel_valid(wifi_prop, wifi_radio_oper_param->band,
-                            wifi_radio_oper_param->channel)) != RETURN_OK) {
-                        wifi_radio_oper_param->channel = dfs_fallback_channel(wifi_prop,
-                            wifi_radio_oper_param->band);
+                    if ((is_wifi_channel_valid(wifi_prop, wifi_radio_oper_param->band, wifi_radio_oper_param->channel)) != RETURN_OK) {
+                        wifi_radio_oper_param->channel = dfs_fallback_channel(wifi_prop, wifi_radio_oper_param->band);
                     }
                     wifi_radio_oper_param->operatingClass = 1;
                     wifi_util_info_print(WIFI_CTRL,
@@ -508,39 +500,28 @@ int start_radios(rdk_dev_mode_type_t mode)
                         dfs_channel_data, (60 * 1000), 1, FALSE);
                 } else {
                     wifi_radio_oper_param->channel = 36;
-                    if ((is_wifi_channel_valid(wifi_prop, wifi_radio_oper_param->band,
-                            wifi_radio_oper_param->channel)) != RETURN_OK) {
-                        wifi_radio_oper_param->channel = dfs_fallback_channel(wifi_prop,
-                            wifi_radio_oper_param->band);
+                    if ((is_wifi_channel_valid(wifi_prop, wifi_radio_oper_param->band, wifi_radio_oper_param->channel)) != RETURN_OK) {
+                        wifi_radio_oper_param->channel = dfs_fallback_channel(wifi_prop, wifi_radio_oper_param->band);
                     }
                     wifi_radio_oper_param->operatingClass = 1;
                 }
             }
 
             if (strcmp(wifi_radio_oper_param->radarDetected, " ")) {
-                wifi_util_info_print(WIFI_CTRL,
-                    "%s:%d Triggering dfs_nop_start_timer for radar:%s \n", __func__, __LINE__,
-                    wifi_radio_oper_param->radarDetected);
-                scheduler_add_timer_task(ctrl->sched, FALSE, NULL, dfs_nop_start_timer, NULL,
-                    (60 * 1000), 1, FALSE);
+                wifi_util_info_print(WIFI_CTRL,"%s:%d Triggering dfs_nop_start_timer for radar:%s \n",__func__, __LINE__, wifi_radio_oper_param->radarDetected);
+                scheduler_add_timer_task(ctrl->sched, FALSE, NULL, dfs_nop_start_timer, NULL, (60 * 1000), 1, FALSE);
             }
         }
 
-        if ((wifi_radio_oper_param->EcoPowerDown == false) &&
-            (wifi_prop->radio_presence[index] == false)) {
-            wifi_util_error_print(WIFI_CTRL,
-                "%s: !!!!-ALERT-!!!-Radio not present-!!!-Kernel driver interface down-!!!.Index "
-                "%d\n",
-                __FUNCTION__, index);
+        if ((wifi_radio_oper_param->EcoPowerDown == false) && (wifi_prop->radio_presence[index] == false)) {
+            wifi_util_error_print(WIFI_CTRL,"%s: !!!!-ALERT-!!!-Radio not present-!!!-Kernel driver interface down-!!!.Index %d\n",__FUNCTION__, index);
         }
         ret = wifi_hal_setRadioOperatingParameters(index, wifi_radio_oper_param);
         if (ret != RETURN_OK) {
-            wifi_util_error_print(WIFI_CTRL,
-                "%s: wifi radio parameter set failure: radio_index:%d\n", __FUNCTION__, index);
+            wifi_util_error_print(WIFI_CTRL,"%s: wifi radio parameter set failure: radio_index:%d\n",__FUNCTION__, index);
             return ret;
         } else {
-            wifi_util_info_print(WIFI_CTRL,
-                "%s: wifi radio parameter set success: radio_index:%d\n", __FUNCTION__, index);
+            wifi_util_info_print(WIFI_CTRL,"%s: wifi radio parameter set success: radio_index:%d\n",__FUNCTION__, index);
         }
 
         startTime[index] = get_Uptime();
@@ -641,14 +622,25 @@ void bus_get_vap_init_parameter(const char *name, unsigned int *ret_val)
     get_wifidb_obj()->desc.get_wifi_global_param_fn(&global_param);
     // set all default return values first
     if (strcmp(name, WIFI_DEVICE_MODE) == 0) {
-#ifdef EASY_MESH_NODE
-       wifi_util_info_print(WIFI_CTRL,"%s:%d\n",__func__,__LINE__);
-       *ret_val = (unsigned int)rdk_dev_mode_type_em_node;
-
-#elif EASY_MESH_COLOCATED_NODE
-       wifi_util_info_print(WIFI_CTRL,"%s:%d\n",__func__,__LINE__);
-       *ret_val = (unsigned int)rdk_dev_mode_type_em_colocated_node;
-
+#if defined EASY_MESH_NODE || defined EASY_MESH_COLOCATED_NODE
+        wifi_mgr_t *wifi_mgr = get_wifimgr_obj();
+        int colocated_mode = ((wifi_mgr_t *)get_wifimgr_obj())->hal_cap.wifi_prop.colocated_mode;
+        /* Initially assign this to em_node mode to start with */
+        *ret_val = (unsigned int)rdk_dev_mode_type_em_node;
+        while (colocated_mode == -1) {
+            /* sleep for 1 second and re-read the wifi_hal_getHalCapability till we get 
+               a valid colocated_mode */
+            sleep(1);
+            total_slept++;
+            wifi_hal_getHalCapability(&((wifi_mgr_t *)get_wifimgr_obj())->hal_cap);
+            colocated_mode = ((wifi_mgr_t *)get_wifimgr_obj())->hal_cap.wifi_prop.colocated_mode;
+        }
+        if (colocated_mode == 1) {
+            *ret_val = (unsigned int)rdk_dev_mode_type_em_colocated_node;
+        } else if (colocated_mode == 0) {
+            *ret_val = (unsigned int)rdk_dev_mode_type_em_node;
+        }
+        wifi_util_info_print(WIFI_CTRL, "%s:%d: network_mode:%d.\n", __func__, __LINE__, *ret_val);
 #else
        wifi_util_info_print(WIFI_CTRL,"%s:%d\n",__func__,__LINE__);
 #ifdef ONEWIFI_DEFAULT_NETWORKING_MODE
@@ -664,12 +656,19 @@ void bus_get_vap_init_parameter(const char *name, unsigned int *ret_val)
 #else
         ctrl->dev_type = dev_subtype_rdk;
 #endif
-
     } else if (strcmp(name, WIFI_DEVICE_TUNNEL_STATUS) == 0) {
         *ret_val = DEVICE_TUNNEL_DOWN; // tunnel down
     }
 
-    while ((rc = get_bus_descriptor()->bus_data_get_fn(&ctrl->handle, name, &data)) !=
+#if defined EASY_MESH_NODE || defined EASY_MESH_COLOCATED_NODE
+   if (ctrl->network_mode == rdk_dev_mode_type_em_node ) {
+            wifi_util_dbg_print(WIFI_CTRL, "%s:%d Don't need to proceed for DML fetch for RemoteAgent case, NetworkMode: %d\n",
+                __func__, __LINE__, ctrl->network_mode);
+            return;
+   }
+#endif
+
+   while ((rc = get_bus_descriptor()->bus_data_get_fn(&ctrl->handle, name, &data)) !=
         bus_error_success) {
         sleep(1);
         total_slept++;
@@ -766,7 +765,6 @@ void start_gateway_vaps()
     vap_svc_t *priv_svc, *pub_svc, *mesh_gw_svc;
     unsigned int value;
     wifi_ctrl_t *ctrl;
-
     ctrl = (wifi_ctrl_t *)get_wifictrl_obj();
 
     priv_svc = get_svc_by_type(ctrl, vap_svc_type_private);
@@ -793,10 +791,13 @@ void start_gateway_vaps()
     value = false;
     if (bus_get_active_gw_parameter(WIFI_ACTIVE_GATEWAY_CHECK, &value) == RETURN_OK) {
         ctrl->active_gw_check = value;
-        if (is_sta_enabled() == true) {
-            wifi_util_info_print(WIFI_CTRL, "%s:%d start mesh sta\n",__func__, __LINE__);
-            start_extender_vaps();
-        }
+    } else {
+        wifi_util_error_print(WIFI_CTRL, "%s:%d Failed to get the data for Active GW check\n", __func__, __LINE__);
+    }
+    
+    if (is_sta_enabled() == true) {
+        wifi_util_info_print(WIFI_CTRL, "%s:%d start mesh sta\n",__func__, __LINE__);
+        start_extender_vaps();
     }
 }
 
@@ -838,7 +839,7 @@ int start_wifi_services(void)
         start_gateway_vaps();
         captive_portal_check();
 #if !defined(NEWPLATFORM_PORT) && !defined(_SR213_PRODUCT_REQ_) && \
-        (defined(_XB10_PRODUCT_REQ_) || defined(_SCER11BEL_PRODUCT_REQ_))
+        (defined(_XB10_PRODUCT_REQ_) || defined(_SCER11BEL_PRODUCT_REQ_) || defined(_SCXF11BFL_PRODUCT_REQ_))
         /* Function to check for default SSID and Passphrase for Private VAPS
         if they are default and last-reboot reason is SW get the previous config from Webconfig */
         validate_and_sync_private_vap_credentials();
@@ -859,6 +860,7 @@ int start_wifi_services(void)
     } else if (ctrl->network_mode == rdk_dev_mode_type_em_colocated_node) {
         wifi_util_info_print(WIFI_CTRL, "%s:%d start em_colocated mode\n",__func__, __LINE__);
         start_radios(rdk_dev_mode_type_gw);
+        start_gateway_vaps();
     }
 
     return RETURN_OK;
@@ -1058,27 +1060,38 @@ int start_wifi_health_monitor_thread(void)
 
 int scan_results_callback(int radio_index, wifi_bss_info_t **bss, unsigned int *num)
 {
-    scan_results_t  res;
-
-    memset(&res, 0, sizeof(scan_results_t));
-
-    res.radio_index = radio_index;
+    scan_results_t  *res;
 
     if (*num) {
         // if number of scanned AP's is more than size of res.bss array - truncate
         if (*num > MAX_SCANNED_VAPS){
             *num = MAX_SCANNED_VAPS;
         }
-        res.num = *num;
-        memcpy((unsigned char *)res.bss, (unsigned char *)(*bss), (*num)*sizeof(wifi_bss_info_t));
     }
+
+    res = (scan_results_t *)calloc(1, sizeof(scan_results_t));
+    if(!res) {
+        wifi_util_dbg_print(WIFI_CTRL,"%s:%d Failed to allocate memory for scan_results_t\n", __FUNCTION__, __LINE__);
+        return RETURN_ERR;
+    }
+
+    res->radio_index = radio_index;
+    res->num = *num;
+    memcpy((unsigned char *)res->bss, (unsigned char *)(*bss), (*num)*sizeof(wifi_bss_info_t));
+
     if (is_sta_enabled()) {
-        push_event_to_ctrl_queue(&res, sizeof(scan_results_t), wifi_event_type_hal_ind,
-            wifi_event_scan_results, NULL);
+        if(push_event_to_ctrl_queue(res, sizeof(scan_results_t), wifi_event_type_hal_ind,
+            wifi_event_scan_results, NULL) != RETURN_OK) {
+            wifi_util_error_print(WIFI_CTRL,"%s:%d Failed to push scan_results to queue\n", __FUNCTION__, __LINE__);
+            free(*bss);
+            free(res);
+            return RETURN_ERR;
+        }
     }
     free(*bss);
+    free(res);
 
-    return 0;
+    return RETURN_OK;
 }
 
 void sta_connection_handler(const char *vif_name, wifi_bss_info_t *bss_info, wifi_station_stats_t *sta)
@@ -1113,25 +1126,33 @@ int mgmt_wifi_frame_recv(int ap_index, wifi_frame_t *frame)
     frame_data_t wifi_mgmt_frame;
 
     memset(&wifi_mgmt_frame, 0, sizeof(wifi_mgmt_frame));
-
+    wifi_mgmt_frame.frame.ap_index = ap_index;
+    memcpy(wifi_mgmt_frame.frame.sta_mac, frame->sta_mac, sizeof(mac_address_t));
+    wifi_mgmt_frame.frame.type = frame->type;
+    wifi_mgmt_frame.frame.dir = frame->dir; 
+    wifi_mgmt_frame.frame.sig_dbm = frame->sig_dbm;
+    wifi_mgmt_frame.frame.phy_rate = frame->phy_rate;
+    wifi_mgmt_frame.frame.token = frame->token;
+    wifi_mgmt_frame.frame.recv_freq = frame->recv_freq;
+    wifi_mgmt_frame.frame.len = frame->len;
     memcpy(wifi_mgmt_frame.data, frame->data, frame->len);
-    memcpy(&mgmt_frame.frame, frame, sizeof(wifi_frame_t));
 
     //In side this API we have allocate memory and send it to control queue
-    push_event_to_ctrl_queue((frame_data_t *)&wifi_mgmt_frame, (sizeof(wifi_mgmt_frame) + len), wifi_event_type_hal_ind, wifi_event_hal_mgmt_frames, NULL);
+    push_event_to_ctrl_queue((frame_data_t *)&wifi_mgmt_frame, (sizeof(wifi_mgmt_frame) + frame->len), wifi_event_type_hal_ind, wifi_event_hal_mgmt_frames, NULL);
 
     return RETURN_OK;
 }
 #else
 #if defined (_XB7_PRODUCT_REQ_) || defined (_CBR_PRODUCT_REQ_)
-int mgmt_wifi_frame_recv(int ap_index, mac_address_t sta_mac, uint8_t *frame, uint32_t len, wifi_mgmtFrameType_t type, wifi_direction_t dir, int sig_dbm , int phy_rate)
+int mgmt_wifi_frame_recv(int ap_index, mac_address_t sta_mac, uint8_t *frame, uint32_t len, wifi_mgmtFrameType_t type, wifi_direction_t dir, int sig_dbm , int phy_rate, unsigned int recv_freq)
 #else
-int mgmt_wifi_frame_recv(int ap_index, mac_address_t sta_mac, uint8_t *frame, uint32_t len, wifi_mgmtFrameType_t type, wifi_direction_t dir)
+int mgmt_wifi_frame_recv(int ap_index, mac_address_t sta_mac, uint8_t *frame, uint32_t len, wifi_mgmtFrameType_t type, wifi_direction_t dir, unsigned int recv_freq)
 #endif
 {
     wifi_actionFrameHdr_t *paction = NULL;
     frame_data_t mgmt_frame;
     wifi_event_subtype_t evt_subtype = wifi_event_hal_unknown_frame;
+    wifi_monitor_data_t data;
 
     if (len == 0) {
         wifi_util_dbg_print(WIFI_CTRL,"%s:%d Recived zero length frame\n", __func__, __LINE__);
@@ -1178,6 +1199,25 @@ int mgmt_wifi_frame_recv(int ap_index, mac_address_t sta_mac, uint8_t *frame, ui
         mgmt_frame.frame.len = len;
         evt_subtype = wifi_event_hal_reassoc_rsp_frame;
     } else if (type == WIFI_MGMT_FRAME_TYPE_ACTION) {
+        memcpy(mgmt_frame.data, frame, len);
+        mgmt_frame.frame.len = len;
+        evt_subtype = wifi_event_hal_dpp_public_action_frame;
+        memset(&data, 0, sizeof(wifi_monitor_data_t));
+
+        data.ap_index = ap_index;
+        data.u.msg.frame.ap_index = ap_index;
+        memcpy(data.u.msg.frame.sta_mac, sta_mac, sizeof(mac_address_t));
+        data.u.msg.frame.type = type;
+        data.u.msg.frame.dir = dir;
+#if defined (_XB7_PRODUCT_REQ_) || defined (_CBR_PRODUCT_REQ_)
+    mgmt_frame.frame.sig_dbm = sig_dbm;
+    mgmt_frame.frame.phy_rate = phy_rate;
+#endif
+        data.u.msg.frame.len = len;
+        data.u.msg.frame.recv_freq = recv_freq;
+
+        memcpy(&data.u.msg.data, frame, len);
+        push_event_to_monitor_queue(&data, wifi_event_monitor_action_frame, NULL);
         paction = (wifi_actionFrameHdr_t *)(frame + sizeof(struct ieee80211_frame));
         switch (paction->cat) {
             case wifi_action_frame_type_public:
@@ -1186,6 +1226,10 @@ int mgmt_wifi_frame_recv(int ap_index, mac_address_t sta_mac, uint8_t *frame, ui
             default:
                 break;
         }
+    } else if (type == WIFI_MGMT_FRAME_TYPE_BEACON) {
+        memcpy(mgmt_frame.data, frame, len);
+        mgmt_frame.frame.len = len;
+        evt_subtype = wifi_event_hal_csa_beacon_frame;
     }
     if (evt_subtype != wifi_event_hal_unknown_frame) {
         push_event_to_ctrl_queue((frame_data_t *)&mgmt_frame, sizeof(mgmt_frame), wifi_event_type_hal_ind, evt_subtype, NULL);
@@ -1281,6 +1325,19 @@ void channel_change_callback(wifi_channel_change_event_t radio_channel_param)
     return;
 }
 
+static int wps_event_callback(int apIndex, wifi_wps_ev_t event)
+{
+    wifi_wps_event_t wps_event = {};
+
+    wps_event.vap_index = apIndex;
+    wps_event.event = event;
+
+    push_event_to_ctrl_queue((wifi_wps_event_t *)&wps_event, sizeof(wifi_wps_event_t),
+        wifi_event_type_hal_ind, wifi_event_hal_wps_results, NULL);
+
+    return RETURN_OK;
+}
+
 int init_wifi_ctrl(wifi_ctrl_t *ctrl)
 {
     unsigned int i;
@@ -1362,6 +1419,8 @@ int init_wifi_ctrl(wifi_ctrl_t *ctrl)
 
     /* Register wifi hal channel change events callback */
     wifi_chan_event_register(channel_change_callback);
+
+    wifi_wpsEvent_callback_register(wps_event_callback);
 
     ctrl->bus_events_subscribed = false;
     ctrl->tunnel_events_subscribed = false;
@@ -1616,6 +1675,14 @@ int init_wireless_interface_mac()
                         wifi_vap_info->u.bss_info.bssid[4],
                         wifi_vap_info->u.bss_info.bssid[5]
                         );
+#if defined EASY_MESH_NODE || defined EASY_MESH_COLOCATED_NODE
+                // For fronthaul interfaces, update the mld info
+                wifi_vap_info->u.bss_info.mld_info.common_info.mld_enable = hal_vap_info_map.vap_array[j].u.bss_info.mld_info.common_info.mld_enable;
+                memcpy(wifi_vap_info->u.bss_info.mld_info.common_info.mld_addr, hal_vap_info_map.vap_array[j].u.bss_info.mld_info.common_info.mld_addr, sizeof(wifi_vap_info->u.bss_info.mld_info.common_info.mld_addr));
+                wifi_vap_info->u.bss_info.mld_info.common_info.mld_link_id = hal_vap_info_map.vap_array[j].u.bss_info.mld_info.common_info.mld_link_id;
+                wifi_vap_info->u.bss_info.mld_info.common_info.mld_id = hal_vap_info_map.vap_array[j].u.bss_info.mld_info.common_info.mld_id;
+                wifi_vap_info->u.bss_info.mld_info.common_info.mld_apply = hal_vap_info_map.vap_array[j].u.bss_info.mld_info.common_info.mld_apply;
+#endif
             }
         }
     }
@@ -1740,6 +1807,7 @@ int start_wifi_ctrl(wifi_ctrl_t *ctrl)
     webconfig_send_full_associate_status(ctrl);
     ctrl->exit_ctrl = false;
     ctrl->ctrl_initialized = true;
+    register_endpoint_components(ctrl);
     ctrl_queue_loop(ctrl);
 
 #ifdef ONEWIFI_ANALYTICS_APP_SUPPORT
@@ -1778,6 +1846,37 @@ bool check_wifi_radio_sched_timeout_active_status(wifi_ctrl_t *l_ctrl)
         }
     }
 
+    return false;
+}
+
+bool check_wifi_csa_sched_timeout_active_status_of_radio_index(wifi_ctrl_t *l_ctrl, int radio_index)
+{
+    wifi_scheduler_id_t *sched_id = &l_ctrl->wifi_sched_id;
+
+    if (radio_index < 0 || radio_index >= (int)getNumberRadios()) {
+        // Invalid index
+        return false;
+    }
+
+    if (sched_id->wifi_csa_sched_handler_id[radio_index] != 0) {
+        return true;
+    }
+    return false;
+}
+
+bool check_wifi_radio_sched_timeout_active_status_of_radio_index(wifi_ctrl_t *l_ctrl,
+    int radio_index)
+{
+    wifi_scheduler_id_t *sched_id = &l_ctrl->wifi_sched_id;
+
+    if (radio_index < 0 || radio_index >= (int)getNumberRadios()) {
+        // Invalid index
+        return false;
+    }
+
+    if (sched_id->wifi_radio_sched_handler_id[radio_index] != 0) {
+        return true;
+    }
     return false;
 }
 
@@ -2117,10 +2216,12 @@ static int bus_check_and_subscribe_events(void* arg)
 static int sta_connectivity_selfheal(void* arg)
 {
     wifi_ctrl_t *ctrl = NULL;
-    vap_svc_t *ext_svc;
-
     ctrl = (wifi_ctrl_t *)get_wifictrl_obj();
-    
+    if (ctrl->rf_status_down == true) {
+        wifi_util_dbg_print(WIFI_CTRL,"%s %d Selfheal disabled during ignite mode\n", __func__, __LINE__);
+        return TIMER_TASK_COMPLETE;
+    }
+    vap_svc_t *ext_svc;
     ext_svc = get_svc_by_type(ctrl, vap_svc_type_mesh_ext);
     if (is_sta_enabled()) {
         // check sta connectivity selfheal
@@ -2177,7 +2278,6 @@ static int pending_states_webconfig_analyzer(void *arg)
 
 static void ctrl_queue_timeout_scheduler_tasks(wifi_ctrl_t *ctrl)
 {
-
 #ifdef ONEWIFI_ANALYTICS_APP_SUPPORT
     scheduler_add_timer_task(ctrl->sched, FALSE, NULL, run_analytics_event, NULL, (ANAYLYTICS_PERIOD * 1000), 0, FALSE);
 #endif
@@ -2187,7 +2287,6 @@ static void ctrl_queue_timeout_scheduler_tasks(wifi_ctrl_t *ctrl)
 #endif
     scheduler_add_timer_task(ctrl->sched, FALSE, NULL, run_greylist_event, NULL, (GREYLIST_CHECK_IN_SECONDS * 1000), 0, FALSE);
     scheduler_add_timer_task(ctrl->sched, FALSE, NULL, sta_connectivity_selfheal, NULL, (STA_CONN_RETRY_TIMEOUT * 1000), 0, FALSE);
-
     scheduler_add_timer_task(ctrl->sched, FALSE, NULL, bus_check_and_subscribe_events, NULL, (ctrl->poll_period * 1000), 0, FALSE);
     scheduler_add_timer_task(ctrl->sched, FALSE, NULL, pending_states_webconfig_analyzer, NULL, (ctrl->poll_period * 1000), 0, FALSE);
 
@@ -2625,6 +2724,8 @@ wifi_rfc_dml_parameters_t *get_ctrl_rfc_parameters(void)
         g_wifi_mgr->rfc_dml_parameters.tcm_enabled_rfc;
     g_wifi_mgr->ctrl.rfc_params.wpa3_compatibility_enable =
         g_wifi_mgr->rfc_dml_parameters.wpa3_compatibility_enable;
+    g_wifi_mgr->ctrl.rfc_params.csi_analytics_enabled_rfc =
+        g_wifi_mgr->rfc_dml_parameters.csi_analytics_enabled_rfc;
     strcpy(g_wifi_mgr->ctrl.rfc_params.rfc_id, g_wifi_mgr->rfc_dml_parameters.rfc_id);
     return &g_wifi_mgr->ctrl.rfc_params;
 }
@@ -2787,7 +2888,6 @@ wifi_radio_capabilities_t *getRadioCapability(UINT radioIndex)
         return NULL;
     }
 
-    wifi_util_dbg_print(WIFI_CTRL, "%s Input radioIndex = %d\n", __FUNCTION__, radioIndex);
 
     return &wifi_hal_cap_obj->wifi_prop.radiocap[radioIndex];
 }
@@ -3002,6 +3102,33 @@ void get_subdoc_name_from_vap_index(uint8_t vap_index, int* subdoc)
     } else {
         *subdoc = MESH_STA;
         return;
+    }
+}
+
+void get_subdoc_type_name_from_ap_index(uint8_t vap_index, int *subdoc)
+{
+    UINT radio_index = getRadioIndexFromAp(vap_index);
+    wifi_radio_operationParam_t *radioOperation = getRadioOperationParam(radio_index);
+    if (radioOperation == NULL) {
+        wifi_util_error_print(WIFI_CTRL,
+            "%s : failed to getRadioOperationParam for radio index %d\n", __FUNCTION__,
+            radio_index);
+        return;
+    }
+
+    switch (radioOperation->band) {
+    case WIFI_FREQUENCY_2_4_BAND:
+        *subdoc = webconfig_subdoc_type_vap_24G;
+        break;
+    case WIFI_FREQUENCY_5_BAND:
+        *subdoc = webconfig_subdoc_type_vap_5G;
+        break;
+    case WIFI_FREQUENCY_6_BAND:
+        *subdoc = webconfig_subdoc_type_vap_6G;
+        break;
+    default:
+        *subdoc = webconfig_subdoc_type_unknown;
+        break;
     }
 }
 

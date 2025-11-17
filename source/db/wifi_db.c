@@ -98,14 +98,17 @@ static int init_radio_config_default(int radio_index, wifi_radio_operationParam_
     switch (cfg.band) {
         case WIFI_FREQUENCY_2_4_BAND:
             cfg.operatingClass = 81;
-            cfg.channel = 1;
+            cfg.channel = 6;
             cfg.channelWidth = WIFI_CHANNELBANDWIDTH_20MHZ;
             cfg.variant = WIFI_80211_VARIANT_G | WIFI_80211_VARIANT_N;
+#if defined(CONFIG_IEEE80211BE) && defined(_PLATFORM_BANANAPI_R4_)
+            cfg.variant |= WIFI_80211_VARIANT_BE;
+#endif /* defined(CONFIG_IEEE80211BE) && defined(_PLATFORM_BANANAPI_R4_) */
             break;
         case WIFI_FREQUENCY_5_BAND:
         case WIFI_FREQUENCY_5L_BAND:
             cfg.operatingClass = 128;
-            cfg.channel = 44;
+            cfg.channel = 36;
             cfg.channelWidth = WIFI_CHANNELBANDWIDTH_80MHZ;
             cfg.variant = WIFI_80211_VARIANT_A | WIFI_80211_VARIANT_N | WIFI_80211_VARIANT_AC | WIFI_80211_VARIANT_AX;
 
@@ -124,14 +127,21 @@ static int init_radio_config_default(int radio_index, wifi_radio_operationParam_
 #endif /* CONFIG_IEEE80211BE */
             break;
         case WIFI_FREQUENCY_6_BAND:
-            cfg.operatingClass = 131;
+            cfg.operatingClass = 134;
+#ifndef _PLATFORM_BANANAPI_R4_
             cfg.channel = 5;
+#else
+            cfg.channel = 37;
+#endif /* _PLATFORM_BANANAPI_R4_ */
             cfg.channelWidth = WIFI_CHANNELBANDWIDTH_160MHZ;
             cfg.variant = WIFI_80211_VARIANT_AX;
 
 #ifdef CONFIG_IEEE80211BE
             cfg.variant |= WIFI_80211_VARIANT_BE;
+#ifndef _PLATFORM_BANANAPI_R4_
+//            cfg.operatingClass = 137;
 //            cfg.channelWidth = WIFI_CHANNELBANDWIDTH_320MHZ;
+#endif /* _PLATFORM_BANANAPI_R4_ */
 #endif /* CONFIG_IEEE80211BE */
             break;
         default:
@@ -189,6 +199,8 @@ static int init_radio_config_default(int radio_index, wifi_radio_operationParam_
     cfg.basicDataTransmitRates = WIFI_BITRATE_6MBPS | WIFI_BITRATE_12MBPS | WIFI_BITRATE_24MBPS;
     cfg.operationalDataTransmitRates = WIFI_BITRATE_6MBPS | WIFI_BITRATE_9MBPS | WIFI_BITRATE_12MBPS | WIFI_BITRATE_18MBPS | WIFI_BITRATE_24MBPS | WIFI_BITRATE_36MBPS | WIFI_BITRATE_48MBPS | WIFI_BITRATE_54MBPS;
     Fcfg.radio_index = radio_index;
+    cfg.DFSTimer = DFS_DEFAULT_TIMER_IN_MIN;
+    strncpy(cfg.radarDetected, " ", sizeof(cfg.radarDetected));
     if (is_radio_band_5G(cfg.band)) {
         Fcfg.OffChanTscanInMsec = OFFCHAN_DEFAULT_TSCAN_IN_MSEC;
         Fcfg.OffChanNscanInSec = OFFCHAN_DEFAULT_NSCAN_IN_SEC;
@@ -353,26 +365,7 @@ static int init_vap_config_default(int vap_index, wifi_vap_info_t *config,
         }
 
         cfg.u.sta_info.scan_params.channel.band = band;
-
-        switch(band) {
-            case WIFI_FREQUENCY_2_4_BAND:
-                cfg.u.sta_info.scan_params.channel.channel = 1;
-                break;
-            case WIFI_FREQUENCY_5_BAND:
-            case WIFI_FREQUENCY_5L_BAND:
-                cfg.u.sta_info.scan_params.channel.channel = 44;
-                break;
-            case WIFI_FREQUENCY_5H_BAND:
-                cfg.u.sta_info.scan_params.channel.channel = 157;
-                break;
-            case WIFI_FREQUENCY_6_BAND:
-                cfg.u.sta_info.scan_params.channel.channel = 5;
-                break;
-            default:
-                wifi_util_error_print(WIFI_DB,"%s:%d invalid band %d\n", __func__, __LINE__, band);
-                break;
-        }
-
+        cfg.u.sta_info.scan_params.channel.channel = 0;
         cfg.u.sta_info.conn_status = wifi_connection_status_disabled;
         memset(&cfg.u.sta_info.bssid, 0, sizeof(cfg.u.sta_info.bssid));
     } else {
@@ -413,6 +406,9 @@ static int init_vap_config_default(int vap_index, wifi_vap_info_t *config,
         if (isVapMeshBackhaul(vap_index)) {
             cfg.u.bss_info.mac_filter_enable = true;
             cfg.u.bss_info.mac_filter_mode = wifi_mac_filter_mode_white_list;
+        } else if (isVapHotspot(vap_index)) {
+            cfg.u.bss_info.mac_filter_enable = true;
+            cfg.u.bss_info.mac_filter_mode = wifi_mac_filter_mode_black_list;
         } else {
             cfg.u.bss_info.mac_filter_enable = false;
             cfg.u.bss_info.mac_filter_mode = wifi_mac_filter_mode_black_list;
@@ -451,7 +447,14 @@ static int init_vap_config_default(int vap_index, wifi_vap_info_t *config,
                 cfg.u.bss_info.security.mfp = wifi_mfp_cfg_required;
                 cfg.u.bss_info.security.u.key.type = wifi_security_key_type_sae;
             } else {
+#if defined(_PLATFORM_BANANAPI_R4_)
+                cfg.u.bss_info.security.mode = wifi_security_mode_wpa3_transition;
+                cfg.u.bss_info.security.wpa3_transition_disable = false;
+                cfg.u.bss_info.security.mfp = wifi_mfp_cfg_optional;
+                cfg.u.bss_info.security.u.key.type = wifi_security_key_type_psk_sae;
+#else
                 cfg.u.bss_info.security.mode = wifi_security_mode_wpa2_personal;
+#endif // _PLATFORM_BANANAPI_R4_
             }
             cfg.u.bss_info.security.encr = wifi_encryption_aes;
             cfg.u.bss_info.bssHotspot = false;
@@ -488,18 +491,21 @@ static int init_vap_config_default(int vap_index, wifi_vap_info_t *config,
                 strcpy(cfg.u.bss_info.wps.pin, "12345678");
             }
         }
-        else if (isVapHotspot(vap_index)) {
+        else if (isVapHotspot(vap_index) || isVapMeshBackhaul(vap_index)) {
             cfg.u.bss_info.showSsid = true;
         } else {
             cfg.u.bss_info.showSsid = false;
         }
 /*For XER5/XB10/XER10 2.4G XHS is disable by default*/
-#if defined(_XER5_PRODUCT_REQ_) || defined(_XB10_PRODUCT_REQ_) || defined(_SCER11BEL_PRODUCT_REQ_)
-        if (isVapLnfSecure(vap_index) || isVapPrivate(vap_index)) {
+#if defined(_XER5_PRODUCT_REQ_) || defined(_XB10_PRODUCT_REQ_) || defined(_SCER11BEL_PRODUCT_REQ_) || \
+    defined(_SCXF11BFL_PRODUCT_REQ_)
+        if (isVapLnfSecure(vap_index) || isVapPrivate(vap_index) ||
+            isVapMeshBackhaul(vap_index) || isVapXhs(vap_index)) {
             cfg.u.bss_info.enabled = true;
         }
 #else
-        if ((vap_index == 2) || isVapLnfSecure(vap_index) || isVapPrivate(vap_index)) {
+        if ((vap_index == 2) || isVapLnfSecure(vap_index) || isVapPrivate(vap_index) ||
+            isVapMeshBackhaul(vap_index) || isVapXhs(vap_index)) {
             cfg.u.bss_info.enabled = true;
         }
 #endif 
@@ -517,7 +523,6 @@ static int init_vap_config_default(int vap_index, wifi_vap_info_t *config,
 
         if (wifi_hal_get_default_ssid(ssid, vap_index) == 0) {
             strcpy(cfg.u.bss_info.ssid, ssid);
-
         } else {
            strcpy(cfg.u.bss_info.ssid, vap_name);
         }
@@ -623,7 +628,7 @@ void init_wifidb_data(void)
 
         init_vap_config_default(vap_index, vapInfo, rdkVapInfo);
         init_interworking_config_default(vap_index, &vapInfo->u.bss_info.interworking.interworking);
-        init_gas_config_default(&g_wifidb->global_config.gas_config);
+	init_gas_config_default(&g_wifidb->global_config.gas_config);
 
     }
 
@@ -707,7 +712,61 @@ void wifidb_print(char *format, ...)
 int wifidb_get_wifi_vap_info(char *vap_name, wifi_vap_info_t *config,
     rdk_wifi_vap_info_t *rdk_config)
 {
-    return 0;
+    wifi_platform_property_t *wifi_prop = NULL;
+    int ret = RETURN_OK;
+
+    wifi_prop = &((wifi_mgr_t *)get_wifimgr_obj())->hal_cap.wifi_prop;
+    if (vap_name == NULL || config == NULL || wifi_prop == NULL) {
+        wifi_util_error_print(WIFI_DB, "%s:%d Failed to Get VAP info - Null pointer\n", __func__,
+            __LINE__);
+        return RETURN_ERR;
+    }
+    config->vap_index = convert_vap_name_to_index(wifi_prop, vap_name);
+    config->radio_index = convert_vap_name_to_radio_array_index(wifi_prop, vap_name);
+    strncpy(config->vap_name, vap_name, (sizeof(config->vap_name) - 1));
+    ret = get_bridgename_from_vapname(wifi_prop, vap_name, config->bridge_name,
+        sizeof(config->bridge_name));
+
+    rdk_config->exists = TRUE;
+
+    if (isVapSTAMesh(config->vap_index)) {
+        strncpy(config->u.sta_info.ssid, "Mesh_Backhaul", (sizeof(config->u.sta_info.ssid) - 1));
+        config->u.sta_info.enabled = TRUE;
+        config->u.sta_info.scan_params.period = 10;
+        config->u.sta_info.scan_params.channel.channel = 0;
+        config->u.sta_info.scan_params.channel.band = WIFI_FREQUENCY_2_4_BAND |
+            WIFI_FREQUENCY_5_BAND | WIFI_FREQUENCY_6_BAND;
+    } else {
+        strncpy(config->u.bss_info.ssid, "Mesh_Backhaul ", (sizeof(config->u.bss_info.ssid) - 1));
+        config->u.bss_info.enabled = TRUE;
+        config->u.bss_info.showSsid = TRUE;
+        config->u.bss_info.isolation = FALSE;
+        config->u.bss_info.mgmtPowerControl = 100;
+        config->u.bss_info.bssMaxSta = 32;
+        config->u.bss_info.bssTransitionActivated = FALSE;
+        config->u.bss_info.nbrReportActivated = FALSE;
+        config->u.bss_info.network_initiated_greylist = FALSE;
+        config->u.bss_info.connected_building_enabled = FALSE;
+        config->u.bss_info.rapidReconnectEnable = FALSE;
+        config->u.bss_info.rapidReconnThreshold = 0;
+        config->u.bss_info.vapStatsEnable = TRUE;
+        config->u.bss_info.mac_filter_enable = FALSE;
+        config->u.bss_info.mac_filter_mode = wifi_mac_filter_mode_white_list;
+        config->u.bss_info.wmm_enabled = TRUE;
+        config->u.bss_info.UAPSDEnabled = TRUE;
+        config->u.bss_info.beaconRate = WIFI_BITRATE_DEFAULT;
+        config->u.bss_info.wmmNoAck = 0;
+        config->u.bss_info.wepKeyLength = 0;
+        config->u.bss_info.bssHotspot = FALSE;
+        config->u.bss_info.wpsPushButton = FALSE;
+        config->u.bss_info.wps.methods = WIFI_ONBOARDINGMETHODS_EASYCONNECT | WIFI_ONBOARDINGMETHODS_PUSHBUTTON;
+        config->u.bss_info.wps.enable = TRUE;
+        config->u.bss_info.hostap_mgt_frame_ctrl = TRUE;
+        config->u.bss_info.mbo_enabled = TRUE;
+        config->u.bss_info.interop_ctrl = FALSE;
+	config->u.bss_info.inum_sta = 0;
+    }
+    return ret;
 }
 
 int wifidb_update_wifi_macfilter_config(char *macfilter_key, acl_entry_t *config, bool add)
@@ -810,6 +869,31 @@ int wifidb_update_wifi_radio_config(int radio_index, wifi_radio_operationParam_t
 }
 
 int get_wifi_global_param(wifi_global_param_t *config)
+{
+   return 0;
+}
+
+int wifidb_get_rfc_config(UINT rfc_id, wifi_rfc_dml_parameters_t *rfc_info)
+{
+   return 0;
+}
+
+int wifidb_init_interworking_config_default(int vapIndex,void /*wifi_InterworkingElement_t*/ *config)
+{
+   return 0;
+}
+
+int get_wifi_radio_config(int radio_index, wifi_radio_operationParam_t *config, wifi_radio_feature_param_t *feat_config)
+{
+   return 0;
+}
+
+int get_wifi_vap_config(int radio_index,wifi_vap_info_map_t *config)
+{
+   return 0;
+}
+
+int get_all_param_from_psm_and_set_into_db(void)
 {
    return 0;
 }

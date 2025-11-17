@@ -130,6 +130,7 @@ _COSA_DML_WIFI_AP_SEC_ENCRYPTION
     COSA_DML_WIFI_AP_SEC_TKIP    = 1,
     COSA_DML_WIFI_AP_SEC_AES,
     COSA_DML_WIFI_AP_SEC_AES_TKIP,
+    COSA_DML_WIFI_AP_SEC_AES_GCMP
 }
 COSA_DML_WIFI_AP_SEC_ENCRYPTION, *PCOSA_DML_WIFI_AP_SEC_ENCRYPTION;
 
@@ -271,4 +272,6 @@ INT getSecurityTypeFromString(const char *securityName, wifi_security_modes_t *s
 
 void WriteWiFiLog(char *);
 void AssociatedDevice_callback_register();
+int decode_json_obj(bus_handle_t *handle, const char *json_name);
+int get_partner_id(char *partner_id);
 #endif

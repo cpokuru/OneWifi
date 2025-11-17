@@ -858,9 +858,11 @@ static void rbus_sub_handler(rbusHandle_t handle, rbusEvent_t const* event,
     }
     bus_sub_callback_table_t *user_cb = &sub_node_data->cb_table;
     if (user_cb->sub_handler != NULL) {
-        ret = get_rbus_object_data(event_name, event->data, &bus_data);
+        ret = get_rbus_object_data((char *)event->name, event->data, &bus_data);
         if (ret == bus_error_success) {
-            user_cb->sub_handler((char *)event_name, &bus_data, userData);
+            wifi_util_info_print(WIFI_BUS,"%s:%d rbus sub user cb"
+                " triggered for:%s, event:%s\n", __func__, __LINE__, event_name, event->name);
+            user_cb->sub_handler((char *)event->name, &bus_data, userData);
         }
     }
 }
@@ -1549,6 +1551,53 @@ bus_error_t bus_event_unsubscribe(bus_handle_t *handle, char const *event_name) 
     return convert_rbus_to_bus_error_code(rc);
 }
 
+static bus_error_t bus_event_unsubs_ex(bus_handle_t *handle, bus_event_sub_t *l_sub_info_map,
+    int num_sub)
+{
+    VERIFY_NULL_WITH_RC(handle);
+    VERIFY_NULL_WITH_RC(l_sub_info_map);
+
+    rbusError_t rc = bus_error_success;
+    rbusHandle_t p_rbus_handle = handle->u.rbus_handle;
+    rbusEventSubscription_t *sub_info_map;
+
+    sub_info_map = calloc(1, num_sub * sizeof(rbusEventSubscription_t));
+    if (sub_info_map == NULL) {
+        wifi_util_error_print(WIFI_BUS, "%s:%d bus: bus_event_subscribe_ex() calloc is failed\n",
+            __func__, __LINE__);
+        return bus_error_out_of_resources;
+    }
+
+    for (int index = 0; index < num_sub; index++) {
+        sub_info_map[index].eventName = l_sub_info_map[index].event_name;
+        sub_info_map[index].filter = l_sub_info_map[index].filter;
+        sub_info_map[index].interval = l_sub_info_map[index].interval;
+        sub_info_map[index].duration = l_sub_info_map[index].duration;
+        sub_info_map[index].handler = NULL;
+        sub_info_map[index].userData = l_sub_info_map[index].user_data;
+        sub_info_map[index].asyncHandler = NULL;
+        sub_info_map[index].publishOnSubscribe = l_sub_info_map[index].publish_on_sub;
+    }
+
+    rc = rbusEvent_UnsubscribeEx(p_rbus_handle, sub_info_map, num_sub);
+    wifi_util_dbg_print(WIFI_BUS, "%s:%d rbus event Unsubscribe_Ex, rc:%d\n", __func__, __LINE__,
+        rc);
+    if (rc != RBUS_ERROR_SUCCESS) {
+        wifi_util_error_print(WIFI_BUS, "%s:%d rbus UnsubscribeEx failed\n", __func__, __LINE__);
+        free(sub_info_map);
+        return convert_rbus_to_bus_error_code(rc);
+    }
+
+    for (int index = 0; index < num_sub; index++) {
+        bus_table_remove_row(get_bus_mux_sub_cb_map(), (char *)l_sub_info_map[index].event_name);
+        wifi_util_info_print(WIFI_BUS, "%s:%d rbus event name:%s removed successfully\n", __func__,
+            __LINE__, l_sub_info_map[index].event_name);
+    }
+
+    free(sub_info_map);
+    return convert_rbus_to_bus_error_code(rc);
+}
+
 bus_error_t bus_event_subscribe_async(bus_handle_t *handle, char const *event_name, void *cb,
     void *async_cb, void *userData, int timeout)
 {
@@ -1656,8 +1705,8 @@ bus_error_t bus_event_subscribe_ex_async(bus_handle_t *handle, bus_event_sub_t *
     return convert_rbus_to_bus_error_code(ret);
 }
 
-static bus_error_t bus_reg_table_row(bus_handle_t *handle, char const *name, uint32_t row_index,
-    char const *alias)
+static bus_error_t bus_reg_table_row(bus_handle_t *handle, char const *name,
+    uint32_t row_index, char const *alias)
 {
     rbusError_t rc;
     VERIFY_NULL_WITH_RC(name);
@@ -1667,17 +1716,12 @@ static bus_error_t bus_reg_table_row(bus_handle_t *handle, char const *name, uin
 
     rc = rbusTable_registerRow(p_rbus_handle, name, row_index, alias);
     if (rc != RBUS_ERROR_SUCCESS) {
-        wifi_util_error_print(WIFI_BUS,
-            "%s:%d bus: rbusTable_registerRow failed for"
-            " [%s] with error [%d] row_index:%d\n",
-            __func__, __LINE__, name, rc, row_index);
+        wifi_util_error_print(WIFI_BUS, "%s:%d bus: rbusTable_registerRow failed for"
+            " [%s] with error [%d] row_index:%d\n", __func__, __LINE__, name, rc, row_index);
     } else {
-        if (bus_table_add_row(get_bus_mux_reg_cb_map(), (char *)name, row_index) !=
-            bus_error_success) {
-            wifi_util_error_print(WIFI_BUS,
-                "%s:%d bus: mux table add failed for"
-                " [%s] row_index:%d\n",
-                __func__, __LINE__, name, row_index);
+        if (bus_table_add_row(get_bus_mux_reg_cb_map(), (char *)name, row_index) != bus_error_success) {
+            wifi_util_error_print(WIFI_BUS, "%s:%d bus: mux table add failed for"
+            " [%s] row_index:%d\n", __func__, __LINE__, name, row_index);
         }
     }
 
@@ -1694,16 +1738,41 @@ static bus_error_t bus_unreg_table_row(bus_handle_t *handle, char const *name)
 
     rc = rbusTable_unregisterRow(p_rbus_handle, name);
     if (rc != RBUS_ERROR_SUCCESS) {
+        wifi_util_error_print(WIFI_BUS, "%s:%d bus: rbusTable_unregisterRow failed for"
+            " [%s] with error [%d]\n", __func__, __LINE__, name, rc);
+    } else {
+        if (bus_table_remove_row(get_bus_mux_reg_cb_map(), (char *)name) != bus_error_success) {
+            wifi_util_error_print(WIFI_BUS, "%s:%d bus: mux table remove failed for"
+            " [%s]\n", __func__, __LINE__, name);
+        }
+    }
+
+    return convert_rbus_to_bus_error_code(rc);
+}
+
+static bus_error_t bus_add_table_row(bus_handle_t *handle, char const *name, char const *alias,
+    uint32_t *row_index)
+{
+    rbusError_t rc;
+    VERIFY_NULL_WITH_RC(name);
+    VERIFY_NULL_WITH_RC(handle);
+    VERIFY_NULL_WITH_RC(row_index);
+
+    rbusHandle_t p_rbus_handle = handle->u.rbus_handle;
+
+    rc = rbusTable_addRow(p_rbus_handle, name, alias, row_index);
+    if (rc != RBUS_ERROR_SUCCESS) {
         wifi_util_error_print(WIFI_BUS,
-            "%s:%d bus: rbusTable_unregisterRow failed for"
+            "%s:%d bus: rbusTable_addRow failed for"
             " [%s] with error [%d]\n",
             __func__, __LINE__, name, rc);
     } else {
-        if (bus_table_remove_row(get_bus_mux_reg_cb_map(), (char *)name) != bus_error_success) {
+        if (bus_table_add_row(get_bus_mux_reg_cb_map(), (char *)name, *row_index) !=
+            bus_error_success) {
             wifi_util_error_print(WIFI_BUS,
-                "%s:%d bus: mux table remove failed for"
-                " [%s]\n",
-                __func__, __LINE__, name);
+                "%s:%d bus: mux table add failed for"
+                " [%s] row_index:%d\n",
+                __func__, __LINE__, name, *row_index);
         }
     }
 
@@ -1720,13 +1789,17 @@ static bus_error_t bus_remove_table_row(bus_handle_t *handle, char const *name)
 
     rc = rbusTable_removeRow(p_rbus_handle, name);
     if (rc != RBUS_ERROR_SUCCESS) {
-        wifi_util_error_print(WIFI_BUS,
-            "%s:%d bus: rbusTable_removeRow failed for"
-            " [%s] with error [%d]\n",
-            __func__, __LINE__, name, rc);
+        wifi_util_error_print(WIFI_BUS, "%s:%d bus: rbusTable_removeRow failed for"
+            " [%s] with error [%d]\n", __func__, __LINE__, name, rc);
     }
 
     return convert_rbus_to_bus_error_code(rc);
+}
+
+static bus_error_t bus_method_async_invoke(bus_handle_t *handle, char const *param_name, char const *event_name,
+    bus_data_obj_t *input_data, wifi_bus_method_async_resp_handler_t cb, uint32_t timeout)
+{
+    return bus_error_success;
 }
 
 void rdkb_bus_desc_init(wifi_bus_desc_t *desc)
@@ -1745,6 +1818,7 @@ void rdkb_bus_desc_init(wifi_bus_desc_t *desc)
     desc->bus_event_subs_fn = bus_event_subscribe;
     desc->bus_event_subs_async_fn = bus_event_subscribe_async;
     desc->bus_event_unsubs_fn = bus_event_unsubscribe;
+    desc->bus_event_unsubs_ex_fn = bus_event_unsubs_ex;
     desc->bus_event_subs_ex_fn = bus_event_subscribe_ex;
     desc->bus_event_subs_ex_async_fn = bus_event_subscribe_ex_async;
     desc->bus_method_invoke_fn = bus_method_invoke;
@@ -1753,5 +1827,7 @@ void rdkb_bus_desc_init(wifi_bus_desc_t *desc)
     desc->bus_get_trace_context_fn = bus_get_trace_context;
     desc->bus_reg_table_row_fn = bus_reg_table_row;
     desc->bus_unreg_table_row_fn = bus_unreg_table_row;
+    desc->bus_add_table_row_fn = bus_add_table_row;
     desc->bus_remove_table_row_fn = bus_remove_table_row;
+    desc->bus_method_async_invoke_fn = bus_method_async_invoke;
 }

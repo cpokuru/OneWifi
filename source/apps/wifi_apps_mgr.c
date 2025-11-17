@@ -25,7 +25,9 @@
 #include "wifi_ctrl.h"
 #include "wifi_mgr.h"
 #include "wifi_util.h"
-#include "wifi_apps_mgr.h"
+#ifdef ONEWIFI_STA_MGR_APP_SUPPORT
+#include "wifi_sta_mgr.h"
+#endif
 
 wifi_app_t *get_app_by_inst(wifi_apps_mgr_t *apps_mgr, wifi_app_inst_t inst)
 {
@@ -268,6 +270,9 @@ int update_rfc_params(wifi_app_descriptor_t *descriptor)
 
     if (descriptor->inst == wifi_app_inst_levl) {
         descriptor->rfc = rfc_param->levl_enabled_rfc;
+        descriptor->enable = descriptor->rfc;
+    } else if (descriptor->inst == wifi_app_inst_csi_analytics) {
+        descriptor->rfc = rfc_param->csi_analytics_enabled_rfc;
         descriptor->enable = descriptor->rfc;
     }
     return 0;

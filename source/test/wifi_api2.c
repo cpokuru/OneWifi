@@ -23,7 +23,7 @@
 #include <string.h>
 #include <stdarg.h>
 #include <getopt.h>
-#include <rbus.h>
+#include <rbus/rbus.h>
 
 #define WIFI_RBUS_WIFIAPI_COMMAND               "Device.WiFi.WiFiAPI.command"
 #define WIFI_RBUS_WIFIAPI_RESULT                "Device.WiFi.WiFiAPI.result"
@@ -41,7 +41,8 @@ static void wifi_api2_eventhandler(
 {
     rbusValue_t wifi_api_result;
 
-    wifi_api_result = rbusObject_GetValue(event->data, "value");
+    /* Name (2nd arg) should be in sync with the name from rbusObject_SetValue */
+    wifi_api_result = rbusObject_GetValue(event->data, WIFI_RBUS_WIFIAPI_RESULT);
 
     if (wifi_api_result) {
         printf("%s\n", rbusValue_GetString(wifi_api_result, NULL));

@@ -2,9 +2,9 @@ name: Build Check
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "develop" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "develop" ]
 
 jobs:
   build:
@@ -15,6 +15,8 @@ jobs:
         platform:
           - name: "Raspberry Pi"
             makefile_path: "build/linux/rpi/makefile"
+          - name: "Banana Pi R4"
+            makefile_path: "build/linux/bpi/makefile"
       fail-fast: false
 
     name: Build for ${{ matrix.platform.name }}

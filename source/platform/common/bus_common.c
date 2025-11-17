@@ -700,13 +700,11 @@ bus_error_t bus_table_remove_row(elem_node_map_t *p_root_node, char *p_name_spac
 int check_dm_min_max_data_range(long int min_data, long int max_data, raw_data_t *bus_set_data)
 {
     if (min_data == 0 && max_data == 0) {
-        wifi_util_info_print(WIFI_BUS, "%s:%d: int range validation is not needed\n", __func__,
-            __LINE__);
+        wifi_util_info_print(WIFI_BUS,"%s:%d: int range validation is not needed\n",__func__, __LINE__);
         return RETURN_OK;
     }
 
-    wifi_util_info_print(WIFI_BUS, "%s:%d: set data type:%d\n", __func__, __LINE__,
-        bus_set_data->data_type);
+    wifi_util_info_print(WIFI_BUS,"%s:%d: set data type:%d\n",__func__, __LINE__, bus_set_data->data_type);
     if (bus_set_data->data_type == bus_data_type_boolean) {
         COMPARE_INT_RANGE((bool)min_data, (bool)max_data, bus_set_data->raw_data.b);
     } else if (bus_set_data->data_type == bus_data_type_int8) {
@@ -729,25 +727,24 @@ int check_dm_min_max_data_range(long int min_data, long int max_data, raw_data_t
 int validate_dm_string_param(uint32_t num_of_str, char **str, char *set_str)
 {
     if (num_of_str == 0) {
-        wifi_util_info_print(WIFI_BUS, "%s:%d: string validation is not set\n", __func__, __LINE__);
+        wifi_util_info_print(WIFI_BUS,"%s:%d: string validation is not set\n",__func__, __LINE__);
     } else if (str == NULL || set_str == NULL) {
-        wifi_util_info_print(WIFI_BUS, "%s:%d: input string is NULL:%p:%p\n", __func__, __LINE__,
-            str, set_str);
+        wifi_util_info_print(WIFI_BUS,"%s:%d: input string is NULL:%p:%p\n", __func__, __LINE__, str, set_str);
     } else {
         uint32_t index;
         bool str_found = false;
 
-        for (index = 0; index < num_of_str; index++) {
+        for(index = 0; index < num_of_str; index++) {
             if (str[index] && (strncmp(str[index], set_str, strlen(set_str) + 1) == 0)) {
                 str_found = true;
                 break;
-            }
+	    }
         }
         if (str_found == false) {
-            wifi_util_info_print(WIFI_BUS, "%s:%d: string:%s validation is failed:%d\n", __func__,
+            wifi_util_info_print(WIFI_BUS,"%s:%d: string:%s validation is failed:%d\n",__func__,
                 __LINE__, set_str, num_of_str);
             return RETURN_ERR;
-        }
+	}
     }
 
     return RETURN_OK;
@@ -760,19 +757,176 @@ int validate_dm_set_parameters(data_model_properties_t *data_model_prop, raw_dat
     BUS_CHECK_NULL_WITH_RC(data_model_prop, ret);
 
     if (data_model_prop->data_permission == false) {
-        wifi_util_error_print(WIFI_BUS, "%s:%d: data is not permit to set\n", __func__, __LINE__);
+        wifi_util_error_print(WIFI_BUS,"%s:%d: data is not permit to set\n",__func__, __LINE__);
         return ret;
     }
 
-    ret = check_dm_min_max_data_range(data_model_prop->min_data_range,
-        data_model_prop->max_data_range, bus_set_data);
+    ret = check_dm_min_max_data_range(data_model_prop->min_data_range, data_model_prop->max_data_range, bus_set_data);
     if (ret != RETURN_OK) {
-        wifi_util_error_print(WIFI_BUS, "%s:%d: set data min/max data range is not propered\n",
-            __func__, __LINE__);
+        wifi_util_error_print(WIFI_BUS,"%s:%d: set data min/max data range is not propered\n",__func__, __LINE__);
         return ret;
     } else if (bus_set_data->data_type == bus_data_type_string) {
-        ret = validate_dm_string_param(data_model_prop->num_of_str_validation,
-            data_model_prop->str_validation, (char *)bus_set_data->raw_data.bytes);
+        ret = validate_dm_string_param(data_model_prop->num_of_str_validation, data_model_prop->str_validation,
+            (char *)bus_set_data->raw_data.bytes);
+    }
+
+    return ret;
+}
+
+bus_data_prop_t *memory_alloc_for_bus_data_prop(void)
+{
+    bus_data_prop_t *temp = calloc(1, sizeof(bus_data_prop_t));
+    VERIFY_NULL_WITH_RETURN_ADDR(temp);
+    temp->ref_count = 1;
+    return temp;
+}
+
+int bus_data_prop_retain(bus_data_prop_t *p_prop)
+{
+    VERIFY_NULL_WITH_RETURN_INT(p_prop);
+    p_prop->ref_count++;
+    return RETURN_OK;
+}
+
+void free_bus_raw_data(raw_data_t *data)
+{
+    if ((data->raw_data.bytes)
+        && (data->data_type == bus_data_type_bytes
+            || data->data_type == bus_data_type_string)) {
+        free(data->raw_data.bytes);
+    }
+}
+
+void bus_release_data_prop(bus_data_prop_t *p_data_prop, uint32_t *num_prop)
+{
+    bus_data_prop_t *next, *prev, *cur;
+
+    if (p_data_prop->ref_count == 1) {
+        free_bus_raw_data(&p_data_prop->value);
+        p_data_prop->is_data_set = false;
+        p_data_prop->ref_count = 0;
+        (*num_prop)--;
+    } else if (p_data_prop->ref_count > 1) {
+        wifi_util_info_print(WIFI_BUS,"%s:%d memory:%p still have some references:%d\r\n",
+                __func__, __LINE__, p_data_prop, p_data_prop->ref_count);
+        p_data_prop->ref_count--;
+    } else {
+        wifi_util_info_print(WIFI_BUS,"%s:%d memory:%p not have some references:%d\r\n",
+                __func__, __LINE__, p_data_prop, p_data_prop->ref_count);
+    }
+
+    prev = p_data_prop;
+    cur = p_data_prop->next_data;
+    while (cur) {
+        next = cur->next_data;
+        if (cur->ref_count == 1) {
+            free_bus_raw_data(&cur->value);
+            free(cur);
+            (*num_prop)--;
+            prev->next_data = next;
+        } else if (cur->ref_count > 1) {
+            wifi_util_info_print(WIFI_BUS,"%s:%d memory:%p still have some references:%d\r\n",
+                __func__, __LINE__, cur, cur->ref_count);
+            cur->ref_count--;
+            prev = cur;
+        } else {
+            wifi_util_error_print(WIFI_BUS,"%s:%d memory:%p not have some references:%d\r\n",
+                __func__, __LINE__, cur, cur->ref_count);
+            prev = cur;
+        }
+        cur = next;
+    }
+
+    wifi_util_info_print(WIFI_BUS,"%s:%d remaining num_prop:%d\r\n", __func__, __LINE__, *num_prop);
+}
+
+void bus_release_data_obj(bus_data_obj_t *p_bus_obj)
+{
+    bus_release_data_prop(&p_bus_obj->data_prop, &p_bus_obj->num_prop);
+}
+
+int clone_raw_data(raw_data_t *dst, raw_data_t *src)
+{
+    BUS_CHECK_NULL_WITH_RC(dst, RETURN_ERR);
+    BUS_CHECK_NULL_WITH_RC(src, RETURN_ERR);
+
+    memcpy(dst, src, sizeof(raw_data_t));
+
+    if ((dst->data_type == bus_data_type_bytes) || (dst->data_type == bus_data_type_string)) {
+        dst->raw_data.bytes = malloc(dst->raw_data_len);
+        BUS_CHECK_NULL_WITH_RC(dst->raw_data.bytes, RETURN_ERR);
+        memcpy(dst->raw_data.bytes, src->raw_data.bytes, dst->raw_data_len);
+    }
+    return RETURN_OK;
+}
+
+int bus_get_raw_data_prop(bus_data_prop_t *p_bus_prop, const char *event_name, raw_data_t *p_raw_data)
+{
+    BUS_CHECK_NULL_WITH_RC(p_bus_prop, RETURN_ERR);
+    BUS_CHECK_NULL_WITH_RC(p_raw_data, RETURN_ERR);
+
+    if (event_name == NULL) {
+        *p_raw_data = p_bus_prop->value;
+    } else {
+        uint32_t str_len = MIN_VAL(strlen(event_name) + 1, BUS_MAX_NAME_LENGTH);
+
+        while(p_bus_prop) {
+            if (!strncmp(event_name, p_bus_prop->name, str_len)) {
+                *p_raw_data = p_bus_prop->value;
+                return RETURN_OK;
+            }
+            p_bus_prop = p_bus_prop->next_data;
+        }
+    }
+
+    return RETURN_ERR;
+}
+
+int bus_set_raw_data_prop(bus_data_prop_t *p_bus_prop, const char *event_name, raw_data_t *p_raw_data)
+{
+    BUS_CHECK_NULL_WITH_RC(p_bus_prop, RETURN_ERR);
+    BUS_CHECK_NULL_WITH_RC(p_raw_data, RETURN_ERR);
+
+    if (p_bus_prop->next_data == NULL && p_bus_prop->is_data_set == false) {
+        clone_raw_data(&p_bus_prop->value, p_raw_data);
+        if (event_name != NULL) {
+            p_bus_prop->name_len = strlen(event_name) + 1;
+            strncpy(p_bus_prop->name, event_name, p_bus_prop->name_len);
+        } else {
+            p_bus_prop->name_len = 0;
+            memset(p_bus_prop->name, 0, sizeof(p_bus_prop->name));
+        }
+        p_bus_prop->is_data_set = true;
+        bus_data_prop_retain(p_bus_prop);
+    } else {
+        bus_data_prop_t *temp = memory_alloc_for_bus_data_prop();
+        BUS_CHECK_NULL_WITH_RC(temp, RETURN_ERR);
+
+        clone_raw_data(&temp->value, p_raw_data);
+        temp->is_data_set = true;
+        if (event_name != NULL) {
+            temp->name_len = strlen(event_name) + 1;
+            strncpy(temp->name, event_name, temp->name_len);
+        } else {
+            temp->name_len = 0;
+            memset(temp->name, 0, sizeof(temp->name));
+        }
+
+        temp->next_data = p_bus_prop->next_data;
+        p_bus_prop->next_data = temp;
+    }
+
+    return RETURN_OK;
+}
+
+int bus_set_raw_data_obj(bus_data_obj_t *p_bus_obj, const char *event_name, raw_data_t *p_raw_data)
+{
+    BUS_CHECK_NULL_WITH_RC(p_bus_obj, RETURN_ERR);
+    BUS_CHECK_NULL_WITH_RC(p_raw_data, RETURN_ERR);
+
+    int ret = bus_set_raw_data_prop(&p_bus_obj->data_prop, event_name, p_raw_data);
+    if (ret == RETURN_OK) {
+        p_bus_obj->num_prop++;
     }
 
     return ret;

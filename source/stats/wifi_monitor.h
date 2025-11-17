@@ -77,6 +77,9 @@ typedef enum {
     SECURITY_WPA3_Compatibility = 0x00002000
 } sec_t;
 
+
+
+
 /*
 typedef struct {
     char                    frequency_band[64];

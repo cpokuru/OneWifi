@@ -33,7 +33,9 @@
 #include "wifi_ctrl.h"
 #include <stdlib.h>
 #include "wifi_util.h"
+#ifdef __GLIBC__
 #include <execinfo.h>
+#endif
 #include "util.h"
 #include "misc.h"
 
@@ -238,6 +240,10 @@ bool is_device_type_xle(void)
 {
     return is_supported_gateway_device(C_WNX);
 }
+bool is_device_type_sr203(void)
+{
+    return is_supported_gateway_device("SR203");
+}
 
 int init_wifimgr()
 {
@@ -248,6 +254,9 @@ int init_wifimgr()
     struct stat sb;
     char db_file[128];
     int hal_initialized = RETURN_ERR;
+    
+    // channel change flag initialized as false
+    memset(g_wifi_mgr.channel_change_in_progress, 0, sizeof(g_wifi_mgr.channel_change_in_progress));
 
     if(wifi_hal_pre_init() != RETURN_OK) {
         wifi_util_error_print(WIFI_MGR,"%s wifi hal pre_init failed\n", __func__);

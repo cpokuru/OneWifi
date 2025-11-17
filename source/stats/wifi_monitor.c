@@ -45,7 +45,6 @@
 #include <sched.h>
 #include "scheduler.h"
 #include "timespec_macro.h"
-
 #include <netinet/tcp.h>    //Provides declarations for tcp header
 #include <netinet/ip.h> //Provides declarations for ip header
 #include <arpa/inet.h> // inet_addr
@@ -158,7 +157,7 @@ extern void* bus_handle;
 //#define UPLOAD_AP_TELEMETRY_INTERVAL_MS 24*60*60*1000 // 24 Hours
 
 //#define NEIGHBOR_SCAN_RESULT_INTERVAL 5000 //5 seconds
-#define Min_LogInterval 300 //5 minutes
+#define Min_LogInterval 60 //1 minute
 #define Max_LogInterval 3600 //60 minutes
 #define Min_Chan_Util_LogInterval 5 //5 seconds
 
@@ -1053,6 +1052,7 @@ int get_sta_stats_info (assoc_dev_data_t *assoc_dev_data) {
     assoc_dev_data->dev_stats.cli_MaxRSSI = sta_data->dev_stats.cli_MaxRSSI;
     assoc_dev_data->dev_stats.cli_Disassociations = sta_data->dev_stats.cli_Disassociations;
     assoc_dev_data->dev_stats.cli_AuthenticationFailures = sta_data->dev_stats.cli_AuthenticationFailures;
+    assoc_dev_data->dev_stats.cli_activeNumSpatialStreams = sta_data->dev_stats.cli_activeNumSpatialStreams;
     assoc_dev_data->dev_stats.cli_PacketsSent = sta_data->dev_stats.cli_PacketsSent;
     assoc_dev_data->dev_stats.cli_PacketsReceived = sta_data->dev_stats.cli_PacketsReceived;
     assoc_dev_data->dev_stats.cli_ErrorsSent = sta_data->dev_stats.cli_ErrorsSent;
@@ -1177,7 +1177,7 @@ int set_assoc_req_frame_data(frame_data_t *msg)
         wifi_util_error_print(WIFI_MON,"%s:%d sta_data map not found for vap_index:%d\r\n", __func__, __LINE__, msg->frame.ap_index);
         return RETURN_ERR;
     }
-    
+
     sta = (sta_data_t *)hash_map_get(sta_map, mac_str);
     if (NULL == sta)
     {
@@ -1307,21 +1307,21 @@ void telemetry_event_wpa3_enhanced(int vapindex, char *mac, int rsnvariant, fram
 void wpa3_enhanced_connection_akms_count(telemetry_data_t *sta, int expected_akm, int actual_akm) {
     if (expected_akm == WPA3_SAE_EXT) {
         if (actual_akm == WPA3_SAE_EXT) {
-            sta->akm_24_24_count = sta->akm_24_24_count+1;
+            sta->akm_24_24_count = sta->akm_24_24_count + 1;
         } else if (actual_akm == WPA3_SAE) {
-            sta->akm_24_8_count = sta->akm_24_8_count+1;
+            sta->akm_24_8_count = sta->akm_24_8_count + 1;
         } else if (actual_akm == WPA2_PSK) {
-            sta->akm_24_2_count = sta->akm_24_2_count+1;
+            sta->akm_24_2_count = sta->akm_24_2_count + 1;
         }
     } else if (expected_akm == WPA3_SAE) {
         if (actual_akm == WPA3_SAE) {
-            sta->akm_8_8_count = sta->akm_8_8_count+1;
+            sta->akm_8_8_count = sta->akm_8_8_count + 1;
         } else if (actual_akm == WPA2_PSK) {
-            sta->akm_8_2_count = sta->akm_8_2_count+1;
+            sta->akm_8_2_count = sta->akm_8_2_count + 1;
         }
     } else if (expected_akm == WPA2_PSK) {
         if (actual_akm == WPA2_PSK) {
-            sta->akm_2_2_count = sta->akm_2_2_count+1;
+            sta->akm_2_2_count = sta->akm_2_2_count + 1;
         }
     }
 }
@@ -3221,6 +3221,8 @@ static void get_client_assoc_frame(int ap_index, wifi_associated_dev_t *associat
             memcpy(&assoc_data->sta_data, &sta->assoc_frame_data, sizeof(assoc_req_elem_t));
             wifi_util_dbg_print(WIFI_MON,"%s:%d assoc_frame_data of length:%d copied\n",
                 __func__, __LINE__, sta->assoc_frame_data.msg_data.frame.len);
+            wifi_util_dbg_print(WIFI_MON,"%s:%d sta found for mac:%s \n", __func__, __LINE__, mac_addr);
+
             return;
         } else {
             wifi_util_error_print(WIFI_MON,"%s:%d assoc req frame not found for vap_index:%d: sta_mac:%s time:%ld\r\n",
@@ -3426,10 +3428,9 @@ int init_wifi_monitor()
     chan_util_upload_period = get_chan_util_upload_period();
     wifi_util_dbg_print(WIFI_MON, "%s:%d system uptime val is %ld and upload period is %d in secs\n",
              __FUNCTION__,__LINE__,uptimeval,(g_monitor_module.upload_period*60));
-    
+
     global_param = get_wifidb_wifi_global_param();
     g_monitor_module.sta_health_rssi_threshold = global_param->good_rssi_threshold;
-    
     for (i = 0; i < getTotalNumberVAPs(); i++) {
         UINT vap_index = VAP_INDEX(mgr->hal_cap, i);
         radio = RADIO_INDEX(mgr->hal_cap, i);
@@ -3767,10 +3768,10 @@ long get_sys_uptime()
      gettimeofday(&polling_time, NULL);
 
      if ((fp = fopen("/tmp/upload", "r")) == NULL) {
-     /* Minimum LOG Interval we can set is 300 sec, just verify every 5 mins any change in the LogInterval
+     /* Minimum LOG Interval we can set is 60 sec, just verify every 1 min any change in the LogInterval
         if any change in log_interval do the calculation and dump the VAP status */
           time_gap = polling_time.tv_sec - lastpolledtime;
-          if ( time_gap >= 300 )
+          if ( time_gap >= 60 )
           {
                logInterval=readLogInterval();
                lastpolledtime = polling_time.tv_sec;
@@ -3911,9 +3912,10 @@ int collector_postpone_execute_task(void *arg)
 {
     wifi_mon_collector_element_t *elem = (wifi_mon_collector_element_t *)arg;
     wifi_monitor_t *mon_data = (wifi_monitor_t *)get_wifi_monitor();
+    wifi_mgr_t *mgr = get_wifimgr_obj();
     int id = elem->collector_postpone_task_sched_id;
 
-    if ((mon_data->scan_status[elem->args->radio_index] == 1) && (elem->postpone_cnt < MAX_POSTPONE_EXECUTION)) {
+    if ((mon_data->scan_status[elem->args->radio_index] == 1 || mgr->channel_change_in_progress[elem->args->radio_index] == true) && (elem->postpone_cnt < MAX_POSTPONE_EXECUTION)) {
         wifi_util_dbg_print(WIFI_MON, "%s : %d scan running postpone collector : %s\n",__func__,__LINE__, elem->key);
         scheduler_add_timer_task(mon_data->sched, FALSE, &id, collector_postpone_execute_task, arg, POSTPONE_TIME, 1, FALSE);
         elem->collector_postpone_task_sched_id = id;
@@ -3936,11 +3938,12 @@ int collector_execute_task(void *arg)
 {
     wifi_mon_collector_element_t *elem = (wifi_mon_collector_element_t *)arg;
     wifi_monitor_t *mon_data = (wifi_monitor_t *)get_wifi_monitor();
+    wifi_mgr_t *mgr = get_wifimgr_obj();
     int id = elem->collector_postpone_task_sched_id;
 
     if (elem->stat_desc->stats_type == mon_stats_type_radio_channel_stats || 
             elem->stat_desc->stats_type == mon_stats_type_neighbor_stats) {
-        if (mon_data->scan_status[elem->args->radio_index] == 1) {
+        if (mon_data->scan_status[elem->args->radio_index] == 1 || mgr->channel_change_in_progress[elem->args->radio_index] == true) {
             if (elem->collector_postpone_task_sched_id == 0) {
                 wifi_util_dbg_print(WIFI_MON, "%s : %d scan running postpone collector : %s\n",__func__,__LINE__, elem->key);
                 scheduler_add_timer_task(mon_data->sched, FALSE, &id, collector_postpone_execute_task, arg, POSTPONE_TIME, 1, FALSE);
@@ -4493,4 +4496,3 @@ void free_coordinator(hash_map_t *collector_list)
         hash_map_destroy(collector_list);
     }
 }
-

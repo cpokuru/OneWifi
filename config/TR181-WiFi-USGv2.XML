@@ -207,7 +207,7 @@
         </parameter>
         <parameter>
             <name>WHIX_LogInterval</name>
-            <type>int[300:3600]</type>
+            <type>int[60:3600]</type>
             <syntax>int</syntax>
             <writable>true</writable>
         </parameter>
@@ -279,6 +279,12 @@
         </parameter>
         <parameter>
             <name>Levl</name>
+            <type>boolean</type>
+            <syntax>bool</syntax>
+            <writable>true</writable>
+        </parameter>
+        <parameter>
+            <name>CsiAnalytics</name>
             <type>boolean</type>
             <syntax>bool</syntax>
             <writable>true</writable>
@@ -2649,7 +2655,7 @@ INSTMSMT_PH2 -->
                                 </parameter>
                                 <parameter>
                                     <name>X_CISCO_COM_EncryptionMethod</name>
-                                    <type>string: TKIP(1),AES(2),AES+TKIP(3)</type>
+                                    <type>string: TKIP(1),AES(2),AES+TKIP(3),AES+GCMP(4)</type>
                                     <syntax>uint32/mapped</syntax>
                                     <writable>true</writable>
                                 </parameter>
@@ -3354,6 +3360,11 @@ INSTMSMT_PH2 -->
                        		<parameter>
                             	    <name>X_COMCAST-COM_AuthenticationFailures</name>
                             	    <type>unsignedInt</type>
+                            	    <syntax>uint32</syntax>
+                        	</parameter>
+                        	<parameter>
+                            	    <name>X_RDK_CapSpaStr</name>
+                            	    <type>unsignedInt[0:8]</type>
                             	    <syntax>uint32</syntax>
                         	</parameter>
                             </parameters>

@@ -56,6 +56,8 @@ SW_UPGRADE_DEFAULT_FILE="/tmp/sw_upgrade_private_defaults"
 wave_driver_restart_cnt=0
 bss_queue_full=0
 bss_queue_full_cnt=0
+conn_clients_total=0
+num_clients=0
 
 MODEL_NUM=`grep MODEL_NUM /etc/device.properties | cut -d "=" -f2`
 LOG_FILE="/rdklogs/logs/wifi_selfheal.txt"
@@ -202,6 +204,22 @@ check_bss_queue_one_min()
     done
 }
 
+onewifi_conn_clients_count() {
+    conn_clients_total=0
+    num_clients=0
+    radio_arr=( 1 2 )
+    
+    num_radios=`dmcli eRT retv Device.WiFi.RadioNumberOfEntries`
+    if [ "$num_radios" -eq 3 ]; then
+        radio_arr=( 1 2 17 )
+    fi
+
+    for radio in "${radio_arr[@]}"; do
+        num_clients=`dmcli eRT retv Device.WiFi.AccessPoint.$radio.AssociatedDeviceNumberOfEntries`
+        conn_clients_total=$((conn_clients_total + num_clients))
+    done
+}
+
 onewifi_mem_restart() {
     # Find the OneWifi process PID
     onewifi_pid=$(ps | grep "/usr/bin/OneWifi -subsys eRT\." | grep -v grep | awk '{print $1}')
@@ -234,7 +252,19 @@ onewifi_mem_restart() {
         return
     fi
 
-    if [ "$vmrss" -ge "$threshold2" ]; then
+    # Get number of clients (max per AP and total)
+    onewifi_conn_clients_count
+    adj=$((30720))
+
+    # Adjust threshold up, if high no of clients
+    if [ "$conn_clients_total" -gt 45 ]; then
+        threshold1=$((threshold1 + adj))
+        threshold2=$((threshold2 + adj))
+        echo_t "Adjusted OneWifi mem thresholds by 30 MB up due to high client load: \
+        Number of connected clients: ($conn_clients_total clients)." >> $LOG_FILE
+    fi
+
+    if [ "$vmrss" -gt "$threshold2" ]; then
         if [ "$time_since_last_restart" -ge 86400 ]; then
             echo_t "RSS Memory of Onewifi exceeds RSS threshold2 value and restarting Onewifi [Rss : ($vmrss kB) Threshold2 : ($threshold2 kB)]" >> $LOG_FILE
             systemctl restart onewifi.service
@@ -242,7 +272,7 @@ onewifi_mem_restart() {
         else
             echo_t "OneWifi restart skipped for RSS threshold2 since last restart time is less than 24 hrs [Rss : ($vmrss kB) Threshold2 : ($threshold2 kB)]" >> $LOG_FILE
         fi
-    elif [ "$vmrss" -ge "$threshold1" ] && [ "$m_win" -eq 1 ]; then
+    elif [ "$vmrss" -gt "$threshold1" ] && [ "$m_win" -eq 1 ]; then
         if [ "$time_since_last_restart" -ge 86400 ]; then
             echo_t "RSS Memory of Onewifi exceeds RSS threshold1 value during maintenance window and restarting Onewifi [Rss : ($vmrss kB) Threshold1 : ($threshold1 kB)]" >> $LOG_FILE
             systemctl restart onewifi.service
@@ -252,6 +282,7 @@ onewifi_mem_restart() {
         fi
     else
         echo_t "RSS Memory usage of Onewifi is within the RSS threshold values [Rss : ($vmrss kB)]" >> $LOG_FILE
+        echo_t "Number of connected clients: ($conn_clients_total)" >> $LOG_FILE
     fi
 }
 
@@ -292,18 +323,19 @@ do
             cur_timestamp="`date +"%s"` $1"
             #echo_t "cur_timestamp = $cur_timestamp" >> $LOG_FILE
             if [ "$MODEL_NUM" == "SR213" ]; then
-                eco_mode_2g=`dmcli eRT getv Device.WiFi.Radio.$radio_2g_instance.X_RDK_EcoPowerDown | grep "value:" | cut -f2- -d:| cut -f2- -d:`
+                eco_mode_2g=`dmcli eRT getv Device.WiFi.Radio.$radio_2g_instance.X_RDK_EcoPowerDown | grep "value:" | cut -f2- -d:| cut -f2- -d:` 
                 eco_mode_5g=`dmcli eRT getv Device.WiFi.Radio.$radio_5g_instance.X_RDK_EcoPowerDown | grep "value:" | cut -f2- -d:| cut -f2- -d:`
-		eco_mode_6g="false"
-            elif [ "$MODEL_NUM" == "SCER11BEL" ]; then
+                eco_mode_6g="false"
+            elif [ "$MODEL_NUM" == "SCER11BEL" ]  || [ "$MODEL_NUM" == "SCXF11BFL" ]; then
                 eco_mode_2g=`dmcli eRT getv Device.WiFi.Radio.$radio_2g_instance.X_RDK_EcoPowerDown | grep "value:" | cut -f2- -d:| cut -f2- -d:` 
                 eco_mode_5g=`dmcli eRT getv Device.WiFi.Radio.$radio_5g_instance.X_RDK_EcoPowerDown | grep "value:" | cut -f2- -d:| cut -f2- -d:`
                 eco_mode_6g=`dmcli eRT getv Device.WiFi.Radio.$radio_6g_instance.X_RDK_EcoPowerDown | grep "value:" | cut -f2- -d:| cut -f2- -d:`
             else
                 eco_mode_2g="false"
                 eco_mode_5g="false"
-		eco_mode_6g="false"
+                eco_mode_6g="false"
             fi
+
             if [ $eco_mode_2g == "false" ]; then
                 radio_status_2g=`dmcli eRT getv Device.WiFi.Radio.$radio_2g_instance.Enable | grep "value:" | cut -f2- -d:| cut -f2- -d:` 
                 if [ $radio_status_2g == "true" ]; then
@@ -369,9 +401,9 @@ do
                 fi
             fi
 
-            if [ "$MODEL_NUM" == "$CGM49" ] || [ "${MODEL_NUM}" = "CGM601TCOM" ] || [ "${MODEL_NUM}" = "CWA438TCOM" ] || [ "${MODEL_NUM}" = "SG417DBCT" ] || [ "${MODEL_NUM}" == "SCER11BEL" ]; then
+            if [ "$MODEL_NUM" == "$CGM49" ] || [ "${MODEL_NUM}" = "CGM601TCOM" ] || [ "${MODEL_NUM}" = "CWA438TCOM" ] || [ "${MODEL_NUM}" = "SG417DBCT" ] || [ "${MODEL_NUM}" == "SCER11BEL" ] || [ "$MODEL_NUM" == "SCXF11BFL" ]; then
                 if [ $eco_mode_6g == "false" ]; then
-                    radio_status_6g=`dmcli eRT getv Device.WiFi.Radio.$radio_6g_instance.Enable | grep "value:" | cut -f2- -d:| cut -f2- -d:`
+                    radio_status_6g=`dmcli eRT getv Device.WiFi.Radio.$radio_6g_instance.Enable | grep "value:" | cut -f2- -d:| cut -f2- -d:` 
                     if [ $radio_status_6g == "true" ]; then
                         status_6g=`dmcli eRT getv Device.WiFi.AccessPoint.$private_6g_instance.Enable | grep "value:" | cut -f2- -d:| cut -f2- -d:`
                         if [ $status_6g == "true" ]; then
@@ -399,7 +431,6 @@ do
                     fi
                 fi
             fi
-
 
         #we need to use this changes for only TechXB7 device.
         if [ "$MODEL_NUM" == "$CGM43" -o "$MODEL_NUM" == "$CGA4" ]; then

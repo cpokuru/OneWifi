@@ -34,6 +34,8 @@ extern "C" {
 
 typedef struct _he_bus_handle *he_bus_handle_t;
 
+typedef volatile int atomic_int;
+
 #define HE_BUS_RETURN_ERR -1
 #define HE_BUS_RETURN_OK 0
 
@@ -47,20 +49,30 @@ typedef struct _he_bus_handle *he_bus_handle_t;
 
 #define HE_BUS_MSG_IDENTIFICATION_NUM 0x12345678
 #define HE_BUS_RES_RECV_TIMEOUT_S 10
-#define HE_BUS_MAX_NAME_LENGTH 64
+//if you change this value, remember to change BUS_MAX_NAME_LENGTH too
+#define HE_BUS_MAX_NAME_LENGTH 128
 
-#define VERIFY_NULL(T) \
+#define HE_BUS_VERIFY_NULL(T) \
     if (NULL == T) {   \
         return;        \
     }
-#define VERIFY_NULL_WITH_RETURN_ADDR(T) \
+
+#define HE_BUS_VERIFY_NULL_WITH_RETURN_ADDR(T) \
     if (NULL == T) {                    \
         return NULL;                    \
     }
-#define VERIFY_NULL_WITH_RETURN_INT(T) \
+
+#define HE_BUS_VERIFY_NULL_WITH_RETURN_INT(T) \
     if (NULL == T) {                   \
         return HE_BUS_RETURN_ERR;      \
     }
+
+#define HE_BUS_CHECK_NULL_WITH_RC(ptr, rc) \
+    do { \
+        if ((ptr) == NULL) { \
+            return (rc); \
+        } \
+    } while (0)
 
 #define HE_BUS_NO_DATA_OBJ 0
 #define HE_BUS_SINGLE_DATA_OBJ 1
@@ -139,7 +151,8 @@ typedef enum {
     he_bus_msg_table_remove_event,
     he_bus_msg_publish_event,
     he_bus_msg_sub_event,
-    he_bus_msg_sub_ex_async_event
+    he_bus_msg_sub_ex_async_event,
+    he_bus_msg_method_event
 } he_bus_msg_sub_type_t;
 
 typedef enum he_bus_error {
@@ -192,7 +205,7 @@ typedef union he_bus_raw_data_format {
     uint64_t u64;
     float f32;
     double f64;
-    void *bytes;
+    void const *bytes;
 } he_bus_raw_data_format_t;
 
 typedef struct he_bus_raw_data {
@@ -207,6 +220,7 @@ typedef struct he_bus_stretch_buff {
 } he_bus_stretch_buff_t;
 
 typedef struct he_bus_data_object {
+    atomic_int ref_count;
     uint32_t name_len;
     he_bus_name_string_t name;
     he_bus_msg_sub_type_t msg_sub_type;
@@ -225,6 +239,11 @@ typedef struct he_bus_raw_data_msg {
     uint32_t num_of_obj;
     he_bus_data_object_t data_obj;
 } he_bus_raw_data_msg_t;
+
+typedef struct he_bus_data_objs {
+    uint32_t num_obj;
+    he_bus_data_object_t data_obj;
+} he_bus_data_objs_t;
 
 typedef struct sub_payload_data {
     he_bus_event_sub_action_t action;

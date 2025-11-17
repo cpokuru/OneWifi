@@ -35,13 +35,25 @@ extern "C" {
 #include "wifi_sm.h"
 #include "wifi_motion.h"
 #include "wifi_csi.h"
+#ifdef ONEWIFI_CSI_APP_SUPPORT
+#include "wifi_csi_analytics.h"
+#endif
 #include "wifi_whix.h"
 #include "wifi_harvester.h"
 #include "wifi_ocs.h"
-
+#ifdef EM_APP
+#include "wifi_em.h"
+#endif
+#ifdef ONEWIFI_STA_MGR_APP_SUPPORT
+#include "wifi_sta_mgr.h"
+#endif
 #ifdef ONEWIFI_BLASTER_APP_SUPPORT
 #include "wifi_blaster.h"
 #endif
+
+#ifdef ONEWIFI_EASYCONNECT_APP_SUPPORT
+#include "wifi_easyconnect.h"
+#endif // ONEWIFI_EASYCONNECT_APP_SUPPORT
 
 #define MAX_APP_INIT_DATA 1024
 #define APP_DETACHED 0x01
@@ -73,6 +85,9 @@ typedef struct {
         sm_data_t            sm_data;
         motion_data_t        motion;
         csi_app_t            csi;
+#ifdef ONEWIFI_CSI_APP_SUPPORT
+        csi_analytics_info_t csi_analytics;
+#endif
         whix_data_t          whix;
 #ifdef ONEWIFI_BLASTER_APP_SUPPORT
         blaster_data_t       blaster;
@@ -80,6 +95,12 @@ typedef struct {
 #if defined (FEATURE_OFF_CHANNEL_SCAN_5G)
         off_channel_param_t  ocs[MAX_NUM_RADIOS];
 #endif //FEATURE_OFF_CHANNEL_SCAN_5G
+#ifdef ONEWIFI_STA_MGR_APP_SUPPORT
+        sta_mgr_data_t sta_mgr;
+#endif //ONEWIFI_STA_MGR_APP_SUPPORT
+#ifdef EM_APP
+        em_data_t            em_data;
+#endif //EM_APP
         memwraptool_config_t memwraptool;
     } u;
 } wifi_app_data_t;

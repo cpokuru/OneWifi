@@ -31,6 +31,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/prctl.h>
+#include "bus.h"
 #include "ccsp.h"
 
 #ifdef __cplusplus
@@ -107,11 +108,14 @@ typedef enum {
     WIFI_SERVICES,
     WIFI_HARVESTER,
     WIFI_SM,
+    WIFI_EM,
     WIFI_BLASTER,
     WIFI_OCS,
     WIFI_BUS,
+    WIFI_TCM,
+    WIFI_EC,
+    WIFI_CSI,
     WIFI_MEMWRAPTOOL,
-    WIFI_TCM
 } wifi_dbg_type_t;
 
 typedef enum {
@@ -135,12 +139,18 @@ void wifi_util_print(wifi_log_level_t level, wifi_dbg_type_t module, char *forma
 
 #define PARTNER_ID_LEN 64
 
+#define MAX_SEC_LEN 64
+
 #define MIN_MAC_LEN 12
 #define MAC_ADDR_LEN 6
 typedef unsigned char mac_addr_t[MAC_ADDR_LEN];
 
 #define MAX_WIFI_COUNTRYCODE 252
-#define MIN_NUM_RADIOS 2
+#ifdef RASPBERRY_PI_PORT
+    #define MIN_NUM_RADIOS 1
+#else
+    #define MIN_NUM_RADIOS 2
+#endif
 struct wifiCountryEnumStrMapMember {
     wifi_countrycode_type_t countryCode;
     char countryStr[4];
@@ -346,8 +356,8 @@ bool should_process_hotspot_config_change(const wifi_vap_info_t *lnf_vap_info,
 int key_mgmt_conversion_legacy(wifi_security_modes_t *mode_enum,
     wifi_encryption_method_t *encryp_enum, char *str_mode, int mode_len, char *str_encryp,
     int encryp_len, unsigned int conv_type);
-int key_mgmt_conversion(wifi_security_modes_t *enum_sec, char *str_sec, char *str_sec2, int sec_len,
-    int sec_len2, unsigned int conv_type, int *len);
+int key_mgmt_conversion(wifi_security_modes_t *enum_sec, int *sec_len, unsigned int conv_type,
+    int wpa_key_mgmt_len, char (*wpa_key_mgmt)[MAX_SEC_LEN]);
 int get_radio_if_hw_type(unsigned int radio_index, char *str, int str_len);
 char *to_mac_str(mac_address_t mac, mac_addr_str_t key);
 int is_ssid_name_valid(char *ssid_name);
@@ -443,11 +453,13 @@ bool is_5g_20M_channel_in_dfs(int channel);
 void decode_acs_keep_out_json(const char *data, unsigned int number_of_radios, webconfig_subdoc_data_t *subdoc_data);
 void* bus_get_keep_out_json();
 bool is_6g_supported_device(wifi_platform_property_t *wifi_prop);
+int scan_mode_type_conversion(wifi_neighborScanMode_t *scan_mode_enum, char *scan_mode_str, int scan_mode_len, unsigned int conv_type);
 bool is_vap_param_config_changed(wifi_vap_info_t *vap_info_old, wifi_vap_info_t *vap_info_new,
     rdk_wifi_vap_info_t *rdk_old, rdk_wifi_vap_info_t *rdk_new, bool isSta);
-int scan_mode_type_conversion(wifi_neighborScanMode_t *scan_mode_enum, char *scan_mode_str, int scan_mode_len, unsigned int conv_type);
-int get_partner_id(char *partner_id);
 int update_radio_operating_classes(wifi_radio_operationParam_t *oper);
+int get_partner_id(char *partner_id);
+int interfacename_from_mac(const mac_address_t *mac, char *ifname);
+int mac_address_from_name(const char *ifname, mac_address_t mac);
 #ifdef __cplusplus
 }
 #endif

@@ -77,7 +77,7 @@ extern "C" {
 
 #define ETH_BH_STATUS                      "Device.X_RDK_MeshAgent.EthernetBhaulUplink.Status"
 #define ACS_KEEP_OUT                       "Device.X_RDK_MeshAgent.Mesh.ChannelPlan.Data.KeepOut"
-
+ 
 #define TR181_GLOBAL_FEATURE_PARAM_GFO_SUPPORTED "Device.X_RDK_Features.GatewayFailover.Enable"
 
 #define WIFI_ALL_RADIO_INDICES             0xffff
@@ -118,6 +118,8 @@ extern "C" {
 
 #define CTRL_QUEUE_SIZE_MAX (700 * getNumberRadios())
 
+extern bool is_sta_set;
+
 typedef enum {
     ctrl_webconfig_state_none = 0,
     ctrl_webconfig_state_radio_cfg_rsp_pending = 0x0001,
@@ -144,10 +146,13 @@ typedef enum {
     ctrl_webconfig_state_vap_24G_cfg_rsp_pending = 0x200000,
     ctrl_webconfig_state_vap_5G_cfg_rsp_pending = 0x400000,
     ctrl_webconfig_state_vap_6G_cfg_rsp_pending = 0x800000,
-    ctrl_webconfig_state_max = 0x1000000
+    ctrl_webconfig_state_radio_24G_rsp_pending = 0x1000000,
+    ctrl_webconfig_state_radio_5G_rsp_pending = 0x2000000,
+    ctrl_webconfig_state_radio_6G_rsp_pending = 0x4000000,
+    ctrl_webconfig_state_max = 0x8000000
 } wifi_ctrl_webconfig_state_t;
 
-#define CTRL_WEBCONFIG_STATE_MASK   0x1ffffff
+#define CTRL_WEBCONFIG_STATE_MASK 0xfffffff
 
 typedef struct {
         char mac_addr[MAC_STR_LEN];
@@ -238,6 +243,8 @@ typedef struct wifi_ctrl {
     bool                frame_802_11_injector_subscribed;
     bool                factory_reset;
     bool                marker_list_config_subscribed;
+    bool                wifi_sta_2g_status_subscribed;
+    bool                wifi_sta_5g_status_subscribed;
     bool                eth_bh_status_subscribed;
     bool                mesh_keep_out_chans_subscribed;
     wifiapi_t           wifiapi;
@@ -259,6 +266,7 @@ typedef struct wifi_ctrl {
     int                 speed_test_running;
     events_bus_data_t   events_bus_data;
     hotspot_cfg_sem_param_t hotspot_sem_param;
+    bool                rf_status_down;
 } wifi_ctrl_t;
 
 
@@ -392,11 +400,15 @@ wifi_vap_security_t * Get_wifi_object_bss_security_parameter(uint8_t vapIndex);
 wifi_vap_security_t * Get_wifi_object_sta_security_parameter(uint8_t vapIndex);
 char *get_assoc_devices_blob();
 void get_subdoc_name_from_vap_index(uint8_t vap_index, int* subdoc);
+void get_subdoc_type_name_from_ap_index(uint8_t vap_index, int* subdoc);
+
 int dfs_nop_start_timer(void *args);
 int webconfig_send_full_associate_status(wifi_ctrl_t *ctrl);
-
+void start_station_vaps(bool enable);
 bool hotspot_cfg_sem_wait_duration(uint32_t time_in_sec);
 void hotspot_cfg_sem_signal(bool status);
+int publish_endpoint_status(wifi_ctrl_t *ctrl, int connection_status);
+int publish_endpoint_enable(void);
 
 #ifdef __cplusplus
 }

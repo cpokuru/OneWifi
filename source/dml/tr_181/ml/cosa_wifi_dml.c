@@ -76,7 +76,7 @@
 #include "ccsp_psm_helper.h"
 #include "cosa_dbus_api.h"
 #include "collection.h"
-#include "wifi_hal.h"
+#include <wifi_hal.h>
 #include "../../../stubs/wifi_stubs.h"
 #include "wifi_monitor.h"
 
@@ -86,7 +86,8 @@
 #include "wifi_webconfig.h"//ONE_WIFI
 #endif
 
-#if defined(_COSA_BCM_MIPS_) || defined(_XB6_PRODUCT_REQ_) || defined(_COSA_BCM_ARM_) || defined(_PLATFORM_TURRIS_) || defined(_XER5_PRODUCT_REQ_)  || defined(_SCER11BEL_PRODUCT_REQ_)
+#if defined(_COSA_BCM_MIPS_) || defined(_XB6_PRODUCT_REQ_) || defined(_COSA_BCM_ARM_) || defined(_PLATFORM_TURRIS_) || \
+    defined(_XER5_PRODUCT_REQ_) || defined(_SCER11BEL_PRODUCT_REQ_) || defined(_SCXF11BFL_PRODUCT_REQ_)
 #include "ccsp_base_api.h"
 #include "messagebus_interface_helper.h"
 
@@ -114,7 +115,6 @@ extern unsigned int startTime[MAX_NUM_RADIOS];
 uint8_t g_radio_instance_num = 0;
 extern void* g_pDslhDmlAgent;
 extern int gChannelSwitchingCount;
-extern bool wifi_api_is_device_associated(int ap_index, char *mac);
 
 /***********************************************************************
  IMPORTANT NOTE:
@@ -248,6 +248,7 @@ WiFi_GetParamBoolValue
     char path[32] = {0};
     int val =0 ;
     wifi_global_param_t *pcfg = (wifi_global_param_t *) get_dml_wifi_global_param();
+    wifi_ctrl_t *ctrl = (wifi_ctrl_t *)get_wifictrl_obj();
 
     if(pcfg== NULL)
     {
@@ -356,6 +357,16 @@ WiFi_GetParamBoolValue
     if (AnscEqualString(ParamName, "Levl", TRUE))
     {
         *pBool = rfc_pcfg->levl_enabled_rfc;
+
+        if (ctrl->ctrl_initialized == FALSE) {
+            return FALSE;
+        }
+        return TRUE;
+    }
+
+    if (AnscEqualString(ParamName, "CsiAnalytics", TRUE))
+    {
+        *pBool = rfc_pcfg->csi_analytics_enabled_rfc;
         return TRUE;
     }
 
@@ -430,7 +441,7 @@ WiFi_GetParamBoolValue
         *pBool = rfc_pcfg->tcm_enabled_rfc;
         return TRUE;
     }
- 
+
     if(AnscEqualString(ParamName, "WPA3_Personal_Compatibility", TRUE))
     {
         *pBool = rfc_pcfg->wpa3_compatibility_enable;
@@ -1162,6 +1173,15 @@ WiFi_SetParamBoolValue
     {
         if(bValue != rfc_pcfg->levl_enabled_rfc) {
             push_rfc_dml_cache_to_one_wifidb(bValue, wifi_event_type_levl_rfc);
+        }
+
+        return TRUE;
+    }
+
+    if (AnscEqualString(ParamName, "CsiAnalytics", TRUE))
+    {
+        if(bValue != rfc_pcfg->csi_analytics_enabled_rfc) {
+            push_rfc_dml_cache_to_one_wifidb(bValue, wifi_event_type_csi_analytics_rfc);
         }
 
         return TRUE;
@@ -2828,72 +2848,100 @@ Radio_GetParamStringValue
         return 0;
     }
 
-    if (AnscEqualString(ParamName, "BasicDataTransmitRates", TRUE)) {
-        char buf[512] = { 0 };
-        wifi_util_dbg_print(WIFI_DMCLI, "%s:%d:pcfg->basicDataTransmitRates=%d\n", __func__,
-            __LINE__, pcfg->basicDataTransmitRates);
-        if (pcfg->basicDataTransmitRates & WIFI_BITRATE_6MBPS) {
+    if( AnscEqualString(ParamName, "BasicDataTransmitRates", TRUE))
+    {
+        char buf[512] = {0};
+        wifi_util_dbg_print(WIFI_DMCLI,"%s:%d:pcfg->basicDataTransmitRates=%d\n",__func__, __LINE__, pcfg->basicDataTransmitRates);
+        if ( pcfg->basicDataTransmitRates & WIFI_BITRATE_6MBPS )
+        {
             strcat(buf, "6");
         }
 
-        if (pcfg->basicDataTransmitRates & WIFI_BITRATE_12MBPS) {
-            if (AnscSizeOfString(buf) != 0) {
+        if ( pcfg->basicDataTransmitRates & WIFI_BITRATE_12MBPS )
+        {
+            if (AnscSizeOfString(buf) != 0)
+            {
                 strcat(buf, ",12");
-            } else {
+            }
+            else
+            {
                 strcat(buf, "12");
             }
         }
 
-        if (pcfg->basicDataTransmitRates & WIFI_BITRATE_1MBPS) {
-            if (AnscSizeOfString(buf) != 0) {
+        if (pcfg->basicDataTransmitRates & WIFI_BITRATE_1MBPS)
+        {
+            if (AnscSizeOfString(buf) != 0)
+            {
                 strcat(buf, ",1");
-            } else {
+            }
+            else
+            {
                 strcat(buf, "1");
             }
         }
 
-        if (pcfg->basicDataTransmitRates & WIFI_BITRATE_2MBPS) {
-            if (AnscSizeOfString(buf) != 0) {
+        if (pcfg->basicDataTransmitRates & WIFI_BITRATE_2MBPS)
+        {
+            if (AnscSizeOfString(buf) != 0)
+            {
                 strcat(buf, ",2");
-            } else {
+            }
+            else
+            {
                 strcat(buf, "2");
             }
         }
 
-        if (pcfg->basicDataTransmitRates & WIFI_BITRATE_5_5MBPS) {
-            if (AnscSizeOfString(buf) != 0) {
+        if (pcfg->basicDataTransmitRates & WIFI_BITRATE_5_5MBPS)
+        {
+            if (AnscSizeOfString(buf) != 0)
+            {
                 strcat(buf, ",5.5");
-            } else {
+            }
+            else
+            {
                 strcat(buf, "5.5");
             }
         }
 
-        if (pcfg->basicDataTransmitRates & WIFI_BITRATE_11MBPS) {
-            if (AnscSizeOfString(buf) != 0) {
+        if (pcfg->basicDataTransmitRates & WIFI_BITRATE_11MBPS)
+        {
+            if (AnscSizeOfString(buf) != 0)
+            {
                 strcat(buf, ",11");
-            } else {
+            }
+            else
+            {
                 strcat(buf, "11");
             }
         }
 
-        if (pcfg->basicDataTransmitRates & WIFI_BITRATE_24MBPS) {
-            if (AnscSizeOfString(buf) != 0) {
+        if ( pcfg->basicDataTransmitRates & WIFI_BITRATE_24MBPS )
+        {
+            if (AnscSizeOfString(buf) != 0)
+            {
                 strcat(buf, ",24");
-            } else {
+            }
+            else
+            {
                 strcat(buf, "24");
             }
         }
 
-        if (AnscSizeOfString(buf) < *pUlSize) {
+        if ( AnscSizeOfString(buf) < *pUlSize)
+        {
             AnscCopyString(pValue, buf);
             return 0;
-        } else {
-            *pUlSize = AnscSizeOfString(buf) + 1;
+        }
+        else
+        {
+            *pUlSize = AnscSizeOfString(buf)+1;
             return 1;
         }
-        return 0;
+        return 0;  
     }
-
+    
     if( AnscEqualString(ParamName, "SupportedDataTransmitRates", TRUE))
     {
         /* collect value */
@@ -7696,6 +7744,7 @@ AccessPoint_SetParamIntValue
         set_dml_cache_vap_config_changed(instance_number - 1);
         return (TRUE);
     }
+
     /* CcspTraceWarning(("Unsupported parameter '%s'\n", ParamName)); */
     return FALSE;
 }
@@ -8360,7 +8409,7 @@ void get_security_modes_supported(int vap_index, int *mode)
         COSA_DML_WIFI_SECURITY_WPA2_Personal | COSA_DML_WIFI_SECURITY_WPA2_Enterprise |
         COSA_DML_WIFI_SECURITY_WPA_WPA2_Personal | COSA_DML_WIFI_SECURITY_WPA_WPA2_Enterprise |
         COSA_DML_WIFI_SECURITY_WPA3_Personal | COSA_DML_WIFI_SECURITY_WPA3_Personal_Transition |
-        COSA_DML_WIFI_SECURITY_WPA3_Enterprise | COSA_DML_WIFI_SECURITY_WPA3_Personal_Compatibility;
+        COSA_DML_WIFI_SECURITY_WPA3_Enterprise | COSA_DML_WIFI_SECURITY_WPA3_Personal_Compatibility ;
 }
 
 /**********************************************************************  
@@ -8593,7 +8642,7 @@ Security_GetParamStringValue
     {
         int result;
         result=strcmp((char *)&pcfg->u.radius.ip,"");
-        if(result)
+        if((iscntrl(result) == 0) && result)
         {
             AnscCopyString(pValue, (char *)&pcfg->u.radius.ip);
         }
@@ -9110,7 +9159,7 @@ Security_SetParamStringValue
         {
             memset(&l_security_cfg->u, 0, sizeof(l_security_cfg->u));
         }
-        
+
         if(TmpMode == wifi_security_mode_wpa3_compatibility && !rfc_pcfg->wpa3_compatibility_enable) {
             wifi_util_error_print(WIFI_DMCLI, "%s:%d WPA3 Compatibility mode is not supported when  RFC is disabled \n", __func__, __LINE__);
             return FALSE;
@@ -10499,6 +10548,12 @@ PreAssocDeny_SetParamIntValue
         if (vapInfo->u.bss_info.preassoc.time_ms == iValue) {
             return TRUE;
         }
+
+        if (iValue < 0 || iValue > 1000) {
+            wifi_util_error_print(WIFI_DMCLI,"%s:%d Invalid value for TcmWaitTime\n",__func__, __LINE__);
+            return FALSE;
+        }
+
         wifi_util_dbg_print(WIFI_DMCLI,"%s:%d: DMCLI value set :%d \n",__func__, __LINE__,iValue);
         vapInfo->u.bss_info.preassoc.time_ms = iValue;
         set_cac_cache_changed(instance_number - 1);
@@ -10511,6 +10566,12 @@ PreAssocDeny_SetParamIntValue
         if (vapInfo->u.bss_info.preassoc.min_num_mgmt_frames == iValue) {
             return TRUE;
         }
+
+        if (iValue < 3|| iValue > 10) {
+            wifi_util_error_print(WIFI_DMCLI,"%s:%d Invalid value for TcmMinMgmtFrames\n",__func__, __LINE__);
+            return FALSE;
+        }
+
         wifi_util_dbg_print(WIFI_DMCLI,"%s:%d: DMCLI value set :%d \n",__func__, __LINE__,iValue);
         vapInfo->u.bss_info.preassoc.min_num_mgmt_frames = iValue;
         set_cac_cache_changed(instance_number - 1);
@@ -10856,13 +10917,13 @@ PreAssocDeny_SetParamStringValue
             return TRUE;
         }
 
-        if (strcmp(pString, TCM_EXP_WEIGHTAGE) == 0) {
-            wifi_util_dbg_print(WIFI_DMCLI,"%s:%d Trying to set default value \n", __FUNCTION__,__LINE__);
-            strncpy(vapInfo->u.bss_info.preassoc.tcm_exp_weightage, TCM_EXP_WEIGHTAGE, sizeof(vapInfo->u.bss_info.preassoc.tcm_exp_weightage));
-            set_cac_cache_changed(instance_number - 1);
-            set_dml_cache_vap_config_changed(instance_number - 1);
-            return TRUE;
+        ret = sscanf(pString, "%d", &val);
+        if(ret < 0 || ret > 1)
+        {
+            wifi_util_dbg_print(WIFI_DMCLI,"%s:%d Incorrect TcmExpWeightage value: should be 0 or 1\n", __FUNCTION__,__LINE__);
+            return FALSE;
         }
+
         strncpy(vapInfo->u.bss_info.preassoc.tcm_exp_weightage, pString, sizeof(vapInfo->u.bss_info.preassoc.tcm_exp_weightage));
         set_cac_cache_changed(instance_number - 1);
         set_dml_cache_vap_config_changed(instance_number - 1);
@@ -10875,13 +10936,6 @@ PreAssocDeny_SetParamStringValue
             return TRUE;
         }
 
-        if (strcmp(pString, TCM_GRADIENT_THRESHOLD) == 0) {
-            wifi_util_dbg_print(WIFI_DMCLI,"%s:%d trying to set default value \n", __FUNCTION__,__LINE__);
-            strncpy(vapInfo->u.bss_info.preassoc.tcm_gradient_threshold, TCM_GRADIENT_THRESHOLD, sizeof(vapInfo->u.bss_info.preassoc.tcm_gradient_threshold));
-            set_cac_cache_changed(instance_number - 1);
-            set_dml_cache_vap_config_changed(instance_number - 1);
-            return TRUE;
-        }
         strncpy(vapInfo->u.bss_info.preassoc.tcm_gradient_threshold, pString, sizeof(vapInfo->u.bss_info.preassoc.tcm_gradient_threshold));
         set_cac_cache_changed(instance_number - 1);
         set_dml_cache_vap_config_changed(instance_number - 1);
@@ -16582,6 +16636,13 @@ AssociatedDevice1_GetParamUlongValue
         return TRUE;
     }
 
+    if( AnscEqualString(ParamName, "X_RDK_CapSpaStr", TRUE))
+    {
+        /* collect value */
+        *puLong = assoc_dev_data->dev_stats.cli_activeNumSpatialStreams;
+        free(assoc_dev_data);
+        return TRUE;
+    }
 
     /* CcspTraceWarning(("Unsupported parameter '%s'\n", ParamName)); */
     free(assoc_dev_data);

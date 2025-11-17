@@ -29,7 +29,7 @@ extern "C" {
 #include <pthread.h>
 #include <stdint.h>
 
-#define ERROR_CHECK(CMD)                                                                      \
+#define HE_BUS_ERROR_CHECK(CMD)                                                                      \
     {                                                                                         \
         int err;                                                                              \
         if ((err = CMD) != 0) {                                                               \
@@ -40,39 +40,39 @@ extern "C" {
 #define INIT_HANDLE_MUTEX(handle_mutex)                                            \
     {                                                                              \
         pthread_mutexattr_t attrib;                                                \
-        ERROR_CHECK(pthread_mutexattr_init(&attrib));                              \
-        ERROR_CHECK(pthread_mutexattr_settype(&attrib, PTHREAD_MUTEX_ERRORCHECK)); \
-        ERROR_CHECK(pthread_mutex_init(&handle_mutex, &attrib));                   \
+        HE_BUS_ERROR_CHECK(pthread_mutexattr_init(&attrib));                              \
+        HE_BUS_ERROR_CHECK(pthread_mutexattr_settype(&attrib, PTHREAD_MUTEX_ERRORCHECK)); \
+        HE_BUS_ERROR_CHECK(pthread_mutex_init(&handle_mutex, &attrib));                   \
     }
 
 #define DEINIT_HANDLE_MUTEX(handle_mutex)                  \
     {                                                      \
-        ERROR_CHECK(pthread_mutex_destroy(&handle_mutex)); \
+        HE_BUS_ERROR_CHECK(pthread_mutex_destroy(&handle_mutex)); \
     }
 
 #define HANDLE_LOCK(handle_mutex)                      \
     {                                                  \
-        ERROR_CHECK(pthread_mutex_lock(&handle_mutex)) \
+        HE_BUS_ERROR_CHECK(pthread_mutex_lock(&handle_mutex)) \
     }
 
 #define HANDLE_UNLOCK(handle_mutex)                      \
     {                                                    \
-        ERROR_CHECK(pthread_mutex_unlock(&handle_mutex)) \
+        HE_BUS_ERROR_CHECK(pthread_mutex_unlock(&handle_mutex)) \
     }
 
 #define ELM_LOCK(l_mutex)                         \
     {                                             \
-        ERROR_CHECK(pthread_mutex_lock(&l_mutex)) \
+        HE_BUS_ERROR_CHECK(pthread_mutex_lock(&l_mutex)) \
     }
 
 #define ELM_UNLOCK(l_mutex)                         \
     {                                               \
-        ERROR_CHECK(pthread_mutex_unlock(&l_mutex)) \
+        HE_BUS_ERROR_CHECK(pthread_mutex_unlock(&l_mutex)) \
     }
 
 #define DEINIT_ELM_MUTEX(l_mutex)                     \
     {                                                 \
-        ERROR_CHECK(pthread_mutex_destroy(&l_mutex)); \
+        HE_BUS_ERROR_CHECK(pthread_mutex_destroy(&l_mutex)); \
     }
 
 typedef enum child_node_reference { actual_child_node, ref_child_node } child_node_reference_t;
@@ -88,13 +88,16 @@ typedef he_bus_error_t (*he_bus_table_add_row_handler_t)(char const *tableName,
     char const *aliasName, uint32_t *instNum);
 typedef he_bus_error_t (*he_bus_table_remove_row_handler_t)(char const *rowName);
 typedef he_bus_error_t (*he_bus_method_handler_t)(char const *methodName,
-    he_bus_raw_data_t *inParams, he_bus_raw_data_t *outParams, void *asyncHandle);
+    he_bus_data_object_t const *inParams, he_bus_data_object_t *outParams, void *asyncHandle);
 typedef he_bus_error_t (*he_bus_event_sub_handler_t)(char *eventName,
     he_bus_event_sub_action_t action, int32_t interval, bool *autoPublish);
 
 typedef he_bus_error_t (
     *he_bus_event_consumer_sub_handler_t)(char *event_name, he_bus_raw_data_t *p_data, void *userData);
 typedef he_bus_error_t (*he_bus_event_sub_ex_async_handler_t)(char *event_name, he_bus_error_t ret, void *userData);
+
+typedef void (*he_bus_method_async_resp_handler_t) (char const* methodName, he_bus_error_t ret,
+    he_bus_data_object_t *params, void *userData);
 
 typedef struct he_bus_callback_table {
     he_bus_get_handler_t get_handler; /**< Get parameters handler for the named paramter   */
@@ -103,7 +106,7 @@ typedef struct he_bus_callback_table {
     he_bus_table_remove_row_handler_t table_remove_row_handler; /**< Remove a row from a table*/
     he_bus_event_sub_handler_t event_sub_handler; /**< Event subscribe and unsubscribe
                                                        handler for the event name */
-    he_bus_method_handler_t methodHandler; /**< Method handler  */
+    he_bus_method_handler_t method_handler; /**< Method handler  */
 } he_bus_callback_table_t;
 
 typedef struct he_bus_sub_callback_table {
@@ -150,7 +153,7 @@ typedef struct own_sub_element {
 } own_sub_element_t;
 
 typedef struct he_bus_event_sub {
-    char *event_name;
+    char const *event_name;
     he_bus_event_sub_action_t action;
     uint32_t interval;
     he_bus_sub_callback_table_t handler;
@@ -166,7 +169,7 @@ typedef struct data_model_prop {
 } data_model_prop_t;
 
 typedef struct element_node {
-    char name[32]; /* relative name of element */
+    char name[64]; /* relative name of element */
     he_bus_name_string_t full_name; /* full name/path of element */
     he_bus_element_type_t type; /**< Type of an element */
     he_bus_callback_table_t cb_table; /**< Element Handler table. A specific
@@ -193,6 +196,14 @@ typedef struct _he_bus_handle {
     he_bus_conn_info_t conn_info;
     pthread_mutex_t handle_mutex;
 } he_bus_handle;
+
+typedef struct he_bus_method_invoke_async_data {
+    he_bus_handle_t handle;
+    he_bus_name_string_t method_name;
+    he_bus_data_objs_t in_params;
+    he_bus_method_async_resp_handler_t cb;
+    uint32_t timeout;
+} he_bus_method_invoke_async_data_t;
 
 typedef struct traversal_cb_param {
     union {
@@ -234,7 +245,7 @@ he_bus_error_t he_bus_open(he_bus_handle_t *handle, char *component_name);
 he_bus_error_t he_bus_close(he_bus_handle_t handle);
 he_bus_error_t he_bus_reg_data_elem(he_bus_handle_t handle, he_bus_data_element_t *p_bus_reg_data,
     uint32_t num_of_elem);
-he_bus_error_t he_bus_event_sub(he_bus_handle_t handle, char *event_name,
+he_bus_error_t he_bus_event_sub(he_bus_handle_t handle, char const *event_name,
     he_bus_event_consumer_sub_handler_t sub_handler, uint32_t interval);
 he_bus_error_t he_bus_event_sub_ex(he_bus_handle_t handle, he_bus_event_sub_t *p_sub_data_map,
     uint32_t num_of_sub, uint32_t timeout);
@@ -242,10 +253,14 @@ he_bus_error_t he_bus_event_sub_ex_async(he_bus_handle_t handle, he_bus_event_su
     uint32_t num_of_sub, he_bus_event_sub_ex_async_handler_t sub_ex_async_handler,
     uint32_t timeout);
 // caller needs to free allocated memory
-he_bus_error_t he_bus_get_data(he_bus_handle_t handle, char *event_name, he_bus_raw_data_t *p_data);
-he_bus_error_t he_bus_set_data(he_bus_handle_t handle, char *event_name, he_bus_raw_data_t *p_data);
-he_bus_error_t he_bus_publish_event(he_bus_handle_t handle, char *event_name,
+he_bus_error_t he_bus_get_data(he_bus_handle_t handle, char const *event_name, he_bus_raw_data_t *p_data);
+he_bus_error_t he_bus_set_data(he_bus_handle_t handle, char const *event_name, he_bus_raw_data_t *p_data);
+he_bus_error_t he_bus_publish_event(he_bus_handle_t handle, char const *event_name,
     he_bus_raw_data_t *p_data);
+he_bus_error_t he_bus_method_invoke(he_bus_handle_t handle, char const *event_name,
+    he_bus_data_objs_t *p_input_data, he_bus_data_objs_t *p_output_data);
+he_bus_error_t he_bus_async_method_invoke(he_bus_handle_t handle, char const *event_name,
+    he_bus_data_objs_t *input_data, he_bus_method_async_resp_handler_t cb, uint32_t timeout);
 
 #ifdef __cplusplus
 }
